@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { Toolbar } from './Toolbar';
 import { SceneObject } from './SceneObject';
 import { PlacementPreview } from './PlacementPreview';
+import { BrushPreview } from './BrushPreview';
 import type { PrimitiveType, ToolType } from '../types';
 
 function AxesHelper() {
@@ -25,6 +26,7 @@ interface PlacementData {
   currentPoint: THREE.Vector3 | null;
   previewPosition: [number, number, number];
   previewScale: number;
+  previewRotation: [number, number, number];
 }
 
 function PlacementHandler({
@@ -34,7 +36,7 @@ function PlacementHandler({
 }: {
   isActive: boolean;
   selectedPrimitive: PrimitiveType;
-  onPlaceObject: (type: PrimitiveType, position: [number, number, number], scale: number) => void;
+  onPlaceObject: (type: PrimitiveType, position: [number, number, number], scale: number, rotation: [number, number, number]) => void;
 }) {
   const { raycaster, camera, gl } = useThree();
   const [placement, setPlacement] = useState<PlacementData>({
@@ -43,6 +45,7 @@ function PlacementHandler({
     currentPoint: null,
     previewPosition: [0, 0, 0],
     previewScale: 1,
+    previewRotation: [0, 0, 0],
   });
 
   // Use a ref to access placement in event handlers without causing re-renders
@@ -76,6 +79,7 @@ function PlacementHandler({
         currentPoint: null,
         previewPosition: [0, 0, 0],
         previewScale: 1,
+        previewRotation: [0, 0, 0],
       });
       return;
     }
@@ -90,8 +94,9 @@ function PlacementHandler({
             isPlacing: true,
             startPoint: point,
             currentPoint: point,
-            previewPosition: [point.x, 1, point.z],
+            previewPosition: [point.x, point.y + 0.1, point.z],
             previewScale: 0.1,
+            previewRotation: [0, 0, 0],
           });
         }
       }
@@ -100,18 +105,64 @@ function PlacementHandler({
     const handleMouseMove = (event: MouseEvent) => {
       const currentPlacement = placementRef.current;
       if (currentPlacement.isPlacing && currentPlacement.startPoint) {
-        const point = getGroundIntersection(event);
-        if (point) {
-          const distance = currentPlacement.startPoint.distanceTo(point);
-          const scale = Math.max(0.5, Math.min(distance * 0.5, 5));
+        // Check if shift key is held for straight shapes (no rotation)
+        const shiftPressed = event.shiftKey;
 
-          setPlacement(prev => ({
-            ...prev,
-            currentPoint: point,
-            previewPosition: [currentPlacement.startPoint!.x, scale, currentPlacement.startPoint!.z],
-            previewScale: scale,
-          }));
+        // Get mouse position in normalized device coordinates
+        const rect = gl.domElement.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+          ((event.clientX - rect.left) / rect.width) * 2 - 1,
+          -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+
+        // Create a ray from camera through mouse position
+        raycaster.setFromCamera(mouse, camera);
+
+        // Get a point along the ray at a distance proportional to the camera distance
+        const cameraDistance = camera.position.distanceTo(currentPlacement.startPoint);
+        const rayPoint = new THREE.Vector3();
+        raycaster.ray.at(cameraDistance, rayPoint);
+
+        // Calculate scale based on 2D distance on ground plane for stability
+        const groundPoint = getGroundIntersection(event);
+        const groundDistance = groundPoint ? currentPlacement.startPoint.distanceTo(groundPoint) : 1;
+        const scale = Math.max(0.5, Math.min(groundDistance * 0.5, 5));
+
+        let rotation: [number, number, number] = [0, 0, 0];
+
+        // Only calculate rotation if shift key is NOT pressed
+        if (!shiftPressed) {
+          // Calculate drag vector in 3D space
+          const dragVector = new THREE.Vector3(
+            rayPoint.x - currentPlacement.startPoint.x,
+            rayPoint.y - currentPlacement.startPoint.y,
+            rayPoint.z - currentPlacement.startPoint.z
+          );
+
+          // Normalize drag vector for rotation
+          if (dragVector.length() > 0.01) {
+            dragVector.normalize();
+
+            // Calculate rotation to point object along drag direction
+            // For cones/cylinders, we want the tip/top to point along the drag
+            const up = new THREE.Vector3(0, 1, 0);
+            const quaternion = new THREE.Quaternion();
+            quaternion.setFromUnitVectors(up, dragVector);
+
+            // Convert to Euler angles
+            const euler = new THREE.Euler();
+            euler.setFromQuaternion(quaternion, 'XYZ');
+            rotation = [euler.x, euler.y, euler.z];
+          }
         }
+
+        setPlacement(prev => ({
+          ...prev,
+          currentPoint: rayPoint,
+          previewPosition: [currentPlacement.startPoint!.x, currentPlacement.startPoint!.y + scale * 0.5, currentPlacement.startPoint!.z],
+          previewScale: scale,
+          previewRotation: rotation,
+        }));
       }
     };
 
@@ -120,9 +171,9 @@ function PlacementHandler({
       if (event.button === 0 && currentPlacement.isPlacing && isActive) {
         event.preventDefault();
         event.stopPropagation();
-        const { previewPosition, previewScale } = currentPlacement;
+        const { previewPosition, previewScale, previewRotation } = currentPlacement;
         if (previewScale > 0.3) {
-          onPlaceObject(selectedPrimitive, previewPosition, previewScale);
+          onPlaceObject(selectedPrimitive, previewPosition, previewScale, previewRotation);
         }
         setPlacement({
           isPlacing: false,
@@ -130,6 +181,7 @@ function PlacementHandler({
           currentPoint: null,
           previewPosition: [0, 0, 0],
           previewScale: 1,
+          previewRotation: [0, 0, 0],
         });
       }
     };
@@ -153,6 +205,7 @@ function PlacementHandler({
       type={selectedPrimitive}
       position={placement.previewPosition}
       scale={placement.previewScale}
+      rotation={placement.previewRotation}
     />
   );
 }
@@ -174,8 +227,11 @@ function Scene({
   brushSize: number;
   brushStrength: number;
   onSelectObject: (id: string | null) => void;
-  onPlaceObject: (type: PrimitiveType, position: [number, number, number], scale: number) => void;
+  onPlaceObject: (type: PrimitiveType, position: [number, number, number], scale: number, rotation: [number, number, number]) => void;
 }) {
+  // Find the selected mesh for brush preview
+  const selectedObject = objects.find(obj => obj.id === selectedObjectId);
+  const selectedMeshRef = useRef<THREE.Mesh | null>(null);
   return (
     <>
       <ambientLight intensity={0.5} />
@@ -208,8 +264,15 @@ function Scene({
           brushSize={brushSize}
           brushStrength={brushStrength}
           onSelect={onSelectObject}
+          meshRef={obj.id === selectedObjectId ? selectedMeshRef : undefined}
         />
       ))}
+
+      <BrushPreview
+        brushSize={brushSize}
+        isVisible={currentTool === 'sculpt' && selectedObjectId !== null}
+        targetMesh={selectedMeshRef.current}
+      />
 
       <PlacementHandler
         isActive={currentTool === 'add-primitive'}
@@ -229,12 +292,43 @@ export function ModelingCanvas() {
   const [objects, setObjects] = useState<SceneObjectData[]>([]);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
 
-  const handlePlaceObject = useCallback((type: PrimitiveType, position: [number, number, number], scale: number) => {
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Brush size controls
+      if (event.key === '[') {
+        setBrushSize(prev => Math.max(0.1, prev - 0.1));
+      } else if (event.key === ']') {
+        setBrushSize(prev => Math.min(2, prev + 0.1));
+      }
+      // Brush strength controls
+      else if (event.key === '{' || (event.shiftKey && event.key === '[')) {
+        setBrushStrength(prev => Math.max(0.05, prev - 0.05));
+      } else if (event.key === '}' || (event.shiftKey && event.key === ']')) {
+        setBrushStrength(prev => Math.min(0.5, prev + 0.05));
+      }
+      // Tool shortcuts
+      else if (event.key === 's' && !event.ctrlKey && !event.metaKey) {
+        setCurrentTool('select');
+      } else if (event.key === 'a' && !event.ctrlKey && !event.metaKey) {
+        setCurrentTool('add-primitive');
+      } else if (event.key === 'b' && !event.ctrlKey && !event.metaKey) {
+        setCurrentTool('sculpt');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const handlePlaceObject = useCallback((type: PrimitiveType, position: [number, number, number], scale: number, rotation: [number, number, number]) => {
     const newObject: SceneObjectData = {
       id: Date.now().toString(),
       type,
       position,
-      rotation: [0, 0, 0],
+      rotation,
       scale: [scale, scale, scale],
     };
     setObjects(prev => [...prev, newObject]);
@@ -396,12 +490,21 @@ export function ModelingCanvas() {
         <div style={{ marginTop: '5px' }}>
           {currentTool === 'select' && 'Click objects to select'}
           {currentTool === 'add-primitive' && `Click and drag to place ${selectedPrimitive}`}
-          {currentTool === 'sculpt' && 'Hold left-click to sculpt selected object'}
+          {currentTool === 'sculpt' && 'Hold left-click to sculpt • Hold Shift to pull'}
         </div>
         <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-          <div>Middle Click: Rotate Camera</div>
+          <div><strong>Camera Controls:</strong></div>
+          <div>Middle Click: Rotate</div>
           <div>Right Click: Pan</div>
           <div>Scroll: Zoom</div>
+        </div>
+        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+          <div><strong>Keyboard Shortcuts:</strong></div>
+          <div>S: Select Tool</div>
+          <div>A: Add Shape Tool</div>
+          <div>B: Sculpt (Brush) Tool</div>
+          <div>[ / ]: Brush Size -/+</div>
+          <div>Shift+[ / ]: Strength -/+</div>
         </div>
       </div>
     </div>

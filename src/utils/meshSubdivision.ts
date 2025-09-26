@@ -23,7 +23,45 @@ export function triangleNeedsSubdivision(
 }
 
 /**
- * Subdivide geometry locally around a point
+ * Build edge-to-triangle adjacency map
+ */
+function buildEdgeAdjacency(indexArray: number[]): Map<string, number[]> {
+  const edgeToTriangles = new Map<string, number[]>();
+
+  for (let i = 0; i < indexArray.length; i += 3) {
+    const triangleIndex = i / 3;
+    const i0 = indexArray[i];
+    const i1 = indexArray[i + 1];
+    const i2 = indexArray[i + 2];
+
+    // Add all three edges
+    const edges = [
+      [i0, i1],
+      [i1, i2],
+      [i2, i0]
+    ];
+
+    for (const [a, b] of edges) {
+      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+      if (!edgeToTriangles.has(key)) {
+        edgeToTriangles.set(key, []);
+      }
+      edgeToTriangles.get(key)!.push(triangleIndex);
+    }
+  }
+
+  return edgeToTriangles;
+}
+
+/**
+ * Make edge key from two vertex indices
+ */
+function makeEdgeKey(i1: number, i2: number): string {
+  return i1 < i2 ? `${i1}-${i2}` : `${i2}-${i1}`;
+}
+
+/**
+ * Adaptive subdivision with transition patterns to prevent T-junctions
  */
 export function subdivideGeometryLocally(
   geometry: THREE.BufferGeometry,
@@ -31,7 +69,9 @@ export function subdivideGeometryLocally(
   radius: number,
   maxEdgeLength: number = 0.5
 ): THREE.BufferGeometry {
-  const positions = geometry.getAttribute('position');
+  // Clone the geometry to prevent concurrent modification issues
+  const workingGeometry = geometry.clone();
+  const positions = workingGeometry.getAttribute('position');
   if (!positions) return geometry;
 
   const posArray = positions.array as Float32Array;
@@ -47,46 +87,25 @@ export function subdivideGeometryLocally(
   }
 
   // Get or create index
-  let indices = geometry.getIndex();
+  let indices = workingGeometry.getIndex();
   let indexArray: number[];
 
   if (indices) {
     indexArray = Array.from(indices.array);
   } else {
-    // Create index from non-indexed geometry
     indexArray = [];
-    for (let i = 0; i < vertices.length; i += 3) {
+    for (let i = 0; i < vertices.length - 2; i += 3) {
       indexArray.push(i, i + 1, i + 2);
     }
   }
 
-  const newVertices = [...vertices];
-  const newIndices: number[] = [];
-  const edgeMidpoints = new Map<string, number>();
+  // Build edge adjacency
+  const edgeToTriangles = buildEdgeAdjacency(indexArray);
 
-  // Helper function to get or create midpoint
-  const getMidpoint = (i1: number, i2: number): number => {
-    const key = i1 < i2 ? `${i1}-${i2}` : `${i2}-${i1}`;
+  // STEP 1: Mark edges for subdivision (not triangles)
+  const edgesToSubdivide = new Set<string>();
 
-    if (edgeMidpoints.has(key)) {
-      return edgeMidpoints.get(key)!;
-    }
-
-    const v1 = vertices[i1];
-    const v2 = vertices[i2];
-    const midpoint = v1.clone().add(v2).multiplyScalar(0.5);
-
-    const newIndex = newVertices.length;
-    newVertices.push(midpoint);
-    edgeMidpoints.set(key, newIndex);
-
-    return newIndex;
-  };
-
-  let trianglesToSubdivide = 0;
-  let trianglesProcessed = 0;
-
-  // Process each triangle
+  // First pass: identify edges that need subdivision
   for (let i = 0; i < indexArray.length; i += 3) {
     const i0 = indexArray[i];
     const i1 = indexArray[i + 1];
@@ -96,33 +115,197 @@ export function subdivideGeometryLocally(
     const v1 = vertices[i1];
     const v2 = vertices[i2];
 
-    // Calculate triangle center
-    const center = v0.clone().add(v1).add(v2).multiplyScalar(1/3);
-    const distToPoint = center.distanceTo(point);
+    // Check each edge independently
+    // Edge 01
+    const edge01Length = v0.distanceTo(v1);
+    if (edge01Length > maxEdgeLength) {
+      const edge01Mid = v0.clone().add(v1).multiplyScalar(0.5);
+      // Check if edge midpoint is within radius OR if edge is too long regardless
+      if (edge01Mid.distanceTo(point) < radius || edge01Length > maxEdgeLength * 2) {
+        edgesToSubdivide.add(makeEdgeKey(i0, i1));
+      }
+    }
 
-    trianglesProcessed++;
+    // Edge 12
+    const edge12Length = v1.distanceTo(v2);
+    if (edge12Length > maxEdgeLength) {
+      const edge12Mid = v1.clone().add(v2).multiplyScalar(0.5);
+      if (edge12Mid.distanceTo(point) < radius || edge12Length > maxEdgeLength * 2) {
+        edgesToSubdivide.add(makeEdgeKey(i1, i2));
+      }
+    }
 
-    // Check if triangle is within subdivision radius and needs subdivision
-    if (distToPoint < radius && triangleNeedsSubdivision(v0, v1, v2, maxEdgeLength)) {
-      trianglesToSubdivide++;
-      // Subdivide triangle into 4 smaller triangles
-      const m01 = getMidpoint(i0, i1);
-      const m12 = getMidpoint(i1, i2);
-      const m20 = getMidpoint(i2, i0);
+    // Edge 20
+    const edge20Length = v2.distanceTo(v0);
+    if (edge20Length > maxEdgeLength) {
+      const edge20Mid = v2.clone().add(v0).multiplyScalar(0.5);
+      if (edge20Mid.distanceTo(point) < radius || edge20Length > maxEdgeLength * 2) {
+        edgesToSubdivide.add(makeEdgeKey(i2, i0));
+      }
+    }
+  }
 
-      // Add 4 new triangles
-      newIndices.push(i0, m01, m20);
-      newIndices.push(i1, m12, m01);
-      newIndices.push(i2, m20, m12);
-      newIndices.push(m01, m12, m20);
-    } else {
-      // Keep original triangle
-      newIndices.push(i0, i1, i2);
+  // Second pass: propagate to ensure consistency
+  // If an edge is marked, we need to ensure neighbor triangles can handle it
+  let changed = true;
+  let iterations = 0;
+  while (changed && iterations < 5) {
+    changed = false;
+    iterations++;
+
+    const edgesToAdd = new Set<string>();
+
+    for (const edge of edgesToSubdivide) {
+      const triangles = edgeToTriangles.get(edge) || [];
+
+      for (const triIdx of triangles) {
+        const i = triIdx * 3;
+        const i0 = indexArray[i];
+        const i1 = indexArray[i + 1];
+        const i2 = indexArray[i + 2];
+
+        // Count how many edges of this triangle are marked
+        const edge01 = makeEdgeKey(i0, i1);
+        const edge12 = makeEdgeKey(i1, i2);
+        const edge20 = makeEdgeKey(i2, i0);
+
+        let markedCount = 0;
+        if (edgesToSubdivide.has(edge01)) markedCount++;
+        if (edgesToSubdivide.has(edge12)) markedCount++;
+        if (edgesToSubdivide.has(edge20)) markedCount++;
+
+        // If 2 edges are marked, mark the third for better mesh quality
+        if (markedCount === 2) {
+          if (!edgesToSubdivide.has(edge01) && !edgesToAdd.has(edge01)) {
+            edgesToAdd.add(edge01);
+            changed = true;
+          }
+          if (!edgesToSubdivide.has(edge12) && !edgesToAdd.has(edge12)) {
+            edgesToAdd.add(edge12);
+            changed = true;
+          }
+          if (!edgesToSubdivide.has(edge20) && !edgesToAdd.has(edge20)) {
+            edgesToAdd.add(edge20);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    for (const edge of edgesToAdd) {
+      edgesToSubdivide.add(edge);
     }
   }
 
 
-  // Create new geometry with subdivided mesh
+  // STEP 2: Create midpoints for marked edges
+  const newVertices = [...vertices];
+  const edgeMidpoints = new Map<string, number>();
+
+  for (const edge of edgesToSubdivide) {
+    const [i1, i2] = edge.split('-').map(Number);
+    const v1 = vertices[i1];
+    const v2 = vertices[i2];
+    const midpoint = v1.clone().add(v2).multiplyScalar(0.5);
+
+    const newIndex = newVertices.length;
+    newVertices.push(midpoint);
+    edgeMidpoints.set(edge, newIndex);
+  }
+
+  // STEP 3: Process triangles with adaptive patterns
+  const newIndices: number[] = [];
+
+  for (let i = 0; i < indexArray.length; i += 3) {
+    const i0 = indexArray[i];
+    const i1 = indexArray[i + 1];
+    const i2 = indexArray[i + 2];
+
+    const edge01 = makeEdgeKey(i0, i1);
+    const edge12 = makeEdgeKey(i1, i2);
+    const edge20 = makeEdgeKey(i2, i0);
+
+    const hasEdge01 = edgesToSubdivide.has(edge01);
+    const hasEdge12 = edgesToSubdivide.has(edge12);
+    const hasEdge20 = edgesToSubdivide.has(edge20);
+
+    const pattern = (hasEdge01 ? 1 : 0) + (hasEdge12 ? 2 : 0) + (hasEdge20 ? 4 : 0);
+
+    switch (pattern) {
+      case 0: // No edges subdivided
+        newIndices.push(i0, i1, i2);
+        break;
+
+      case 1: // Only edge 01 subdivided
+        {
+          const m01 = edgeMidpoints.get(edge01)!;
+          newIndices.push(i0, m01, i2);
+          newIndices.push(m01, i1, i2);
+        }
+        break;
+
+      case 2: // Only edge 12 subdivided
+        {
+          const m12 = edgeMidpoints.get(edge12)!;
+          newIndices.push(i0, i1, m12);
+          newIndices.push(i0, m12, i2);
+        }
+        break;
+
+      case 3: // Edges 01 and 12 subdivided
+        {
+          const m01 = edgeMidpoints.get(edge01)!;
+          const m12 = edgeMidpoints.get(edge12)!;
+          newIndices.push(i0, m01, i2);
+          newIndices.push(m01, i1, m12);
+          newIndices.push(m01, m12, i2);
+        }
+        break;
+
+      case 4: // Only edge 20 subdivided
+        {
+          const m20 = edgeMidpoints.get(edge20)!;
+          newIndices.push(i0, i1, m20);
+          newIndices.push(i1, i2, m20);
+        }
+        break;
+
+      case 5: // Edges 01 and 20 subdivided
+        {
+          const m01 = edgeMidpoints.get(edge01)!;
+          const m20 = edgeMidpoints.get(edge20)!;
+          newIndices.push(i0, m01, m20);
+          newIndices.push(m01, i1, i2);
+          newIndices.push(m20, m01, i2);
+        }
+        break;
+
+      case 6: // Edges 12 and 20 subdivided
+        {
+          const m12 = edgeMidpoints.get(edge12)!;
+          const m20 = edgeMidpoints.get(edge20)!;
+          newIndices.push(i0, i1, m12);
+          newIndices.push(i0, m12, m20);
+          newIndices.push(m20, m12, i2);
+        }
+        break;
+
+      case 7: // All edges subdivided
+        {
+          const m01 = edgeMidpoints.get(edge01)!;
+          const m12 = edgeMidpoints.get(edge12)!;
+          const m20 = edgeMidpoints.get(edge20)!;
+          newIndices.push(i0, m01, m20);
+          newIndices.push(i1, m12, m01);
+          newIndices.push(i2, m20, m12);
+          newIndices.push(m01, m12, m20);
+        }
+        break;
+    }
+  }
+
+
+  // Create new geometry
   const newGeometry = new THREE.BufferGeometry();
 
   // Set new positions
@@ -136,18 +319,8 @@ export function subdivideGeometryLocally(
   newGeometry.setAttribute('position', new THREE.BufferAttribute(newPosArray, 3));
   newGeometry.setIndex(newIndices);
 
-  // Copy other attributes if they exist
-  const normal = geometry.getAttribute('normal');
-  if (normal) {
-    newGeometry.computeVertexNormals();
-  }
-
-  const uv = geometry.getAttribute('uv');
-  if (uv) {
-    // For now, we'll skip UV interpolation (complex)
-    // In production, you'd interpolate UVs for new vertices
-  }
-
+  // Compute normals and bounds
+  newGeometry.computeVertexNormals();
   newGeometry.computeBoundingBox();
   newGeometry.computeBoundingSphere();
 
@@ -167,6 +340,5 @@ export function subdivideGeometry(geometry: THREE.BufferGeometry): THREE.BufferG
     geometry.boundingBox.getCenter(center);
   }
 
-  // Subdivide with a large radius to affect whole mesh
   return subdivideGeometryLocally(geometry, center, 1000, 0.5);
 }

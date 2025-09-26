@@ -6,9 +6,10 @@ interface PlacementPreviewProps {
   type: PrimitiveType;
   position: [number, number, number];
   scale: number;
+  rotation: [number, number, number];
 }
 
-export function PlacementPreview({ type, position, scale }: PlacementPreviewProps) {
+export function PlacementPreview({ type, position, scale, rotation }: PlacementPreviewProps) {
   const geometry = useMemo(() => {
     let geo: THREE.BufferGeometry;
     switch (type) {
@@ -36,6 +37,7 @@ export function PlacementPreview({ type, position, scale }: PlacementPreviewProp
   return (
     <mesh
       position={position}
+      rotation={rotation}
       scale={[scale, scale, scale]}
       geometry={geometry}
     >
