@@ -65,8 +65,7 @@ export function SceneObject({
     let geo: THREE.BufferGeometry;
     switch (type) {
       case 'sphere': {
-        // For sphere: circumference = 2πr, so edge length ≈ circumference / segments
-        // segments = circumference / targetEdgeLength = 2πr / targetEdgeLength
+        // TEMPORARY: Back to sphere to test if icosahedron caused mesh tearing
         const radius = avgScale; // sphere radius in world units
         const circumference = 2 * Math.PI * radius;
         const widthSegments = Math.max(8, Math.min(128, Math.round(circumference / targetEdgeLength)));
@@ -105,6 +104,7 @@ export function SceneObject({
         break;
       }
       default: {
+        // Default to sphere (temporary revert)
         const radius = avgScale;
         const circumference = 2 * Math.PI * radius;
         const widthSegments = Math.max(8, Math.min(128, Math.round(circumference / targetEdgeLength)));
@@ -123,8 +123,9 @@ export function SceneObject({
     if (!geo.getIndex()) {
       const positions = geo.getAttribute('position');
       const indices: number[] = [];
-      for (let i = 0; i < positions.count; i++) {
-        indices.push(i);
+      // For non-indexed geometry, create triangles (every 3 vertices form a triangle)
+      for (let i = 0; i < positions.count; i += 3) {
+        indices.push(i, i + 1, i + 2);
       }
       geo.setIndex(indices);
     }
