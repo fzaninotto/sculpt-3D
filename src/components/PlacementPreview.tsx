@@ -14,7 +14,7 @@ export function PlacementPreview({ type, position, scale, rotation }: PlacementP
     let geo: THREE.BufferGeometry;
     switch (type) {
       case 'sphere':
-        geo = new THREE.IcosahedronGeometry(1, 2);
+        geo = new THREE.SphereGeometry(1, 32, 16);
         break;
       case 'cube':
         geo = new THREE.BoxGeometry(1.5, 1.5, 1.5, 2, 2, 2);
@@ -29,7 +29,7 @@ export function PlacementPreview({ type, position, scale, rotation }: PlacementP
         geo = new THREE.TorusGeometry(1, 0.4, 8, 16);
         break;
       default:
-        geo = new THREE.IcosahedronGeometry(1, 2);
+        geo = new THREE.SphereGeometry(1, 32, 16);
     }
     return geo;
   }, [type]);

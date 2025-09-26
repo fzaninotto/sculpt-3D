@@ -217,6 +217,7 @@ function Scene({
   selectedPrimitive,
   brushSize,
   brushStrength,
+  selectedRenderMode,
   onSelectObject,
   onPlaceObject,
 }: {
@@ -226,6 +227,7 @@ function Scene({
   selectedPrimitive: PrimitiveType;
   brushSize: number;
   brushStrength: number;
+  selectedRenderMode: 'shaded' | 'mesh';
   onSelectObject: (id: string | null) => void;
   onPlaceObject: (type: PrimitiveType, position: [number, number, number], scale: number, rotation: [number, number, number]) => void;
 }) {
@@ -263,6 +265,7 @@ function Scene({
           isSculptMode={currentTool === 'sculpt'}
           brushSize={brushSize}
           brushStrength={brushStrength}
+          selectedRenderMode={obj.id === selectedObjectId ? selectedRenderMode : 'shaded'}
           onSelect={onSelectObject}
           meshRef={obj.id === selectedObjectId ? selectedMeshRef : undefined}
         />
@@ -286,11 +289,12 @@ function Scene({
 export function ModelingCanvas() {
   const controlsRef = useRef<any>(null);
   const [brushSize, setBrushSize] = useState(0.5);
-  const [brushStrength, setBrushStrength] = useState(0.2);
+  const [brushStrength, setBrushStrength] = useState(0.5);
   const [currentTool, setCurrentTool] = useState<ToolType>('select');
   const [selectedPrimitive, setSelectedPrimitive] = useState<PrimitiveType>('sphere');
   const [objects, setObjects] = useState<SceneObjectData[]>([]);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedRenderMode, setSelectedRenderMode] = useState<'shaded' | 'mesh'>('shaded');
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -303,9 +307,9 @@ export function ModelingCanvas() {
       }
       // Brush strength controls
       else if (event.key === '{' || (event.shiftKey && event.key === '[')) {
-        setBrushStrength(prev => Math.max(0.05, prev - 0.05));
+        setBrushStrength(prev => Math.max(0.1, prev - 0.2));
       } else if (event.key === '}' || (event.shiftKey && event.key === ']')) {
-        setBrushStrength(prev => Math.min(0.5, prev + 0.05));
+        setBrushStrength(prev => Math.min(1.0, prev + 0.2));
       }
       // Tool shortcuts
       else if (event.key === 's' && !event.ctrlKey && !event.metaKey) {
@@ -361,6 +365,7 @@ export function ModelingCanvas() {
           selectedPrimitive={selectedPrimitive}
           brushSize={brushSize}
           brushStrength={brushStrength}
+          selectedRenderMode={selectedRenderMode}
           onSelectObject={handleSelectObject}
           onPlaceObject={handlePlaceObject}
         />
@@ -388,8 +393,11 @@ export function ModelingCanvas() {
       <Toolbar
         currentTool={currentTool}
         selectedPrimitive={selectedPrimitive}
+        selectedRenderMode={selectedRenderMode}
+        hasSelectedObject={selectedObjectId !== null}
         onToolChange={setCurrentTool}
         onPrimitiveSelect={setSelectedPrimitive}
+        onRenderModeChange={setSelectedRenderMode}
       />
 
       {/* Sculpting Controls Panel */}
@@ -440,9 +448,9 @@ export function ModelingCanvas() {
             </label>
             <input
               type="range"
-              min="0.05"
-              max="0.5"
-              step="0.05"
+              min="0.1"
+              max="1.0"
+              step="0.1"
               value={brushStrength}
               onChange={(e) => setBrushStrength(parseFloat(e.target.value))}
               style={{ width: '100%' }}

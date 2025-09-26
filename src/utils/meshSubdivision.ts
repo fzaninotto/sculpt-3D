@@ -208,6 +208,18 @@ export function subdivideGeometryLocally(
     const v2 = vertices[i2];
     const midpoint = v1.clone().add(v2).multiplyScalar(0.5);
 
+    // For spherical surfaces, project the midpoint back onto the sphere
+    // Check if this looks like a sphere by testing if vertices are roughly unit distance from origin
+    const v1Length = v1.length();
+    const v2Length = v2.length();
+    const avgLength = (v1Length + v2Length) * 0.5;
+
+    // If vertices are roughly on a sphere surface (within reasonable tolerance)
+    if (Math.abs(v1Length - avgLength) < 0.3 && Math.abs(v2Length - avgLength) < 0.3) {
+      // Project midpoint to sphere surface
+      midpoint.normalize().multiplyScalar(avgLength);
+    }
+
     const newIndex = newVertices.length;
     newVertices.push(midpoint);
     edgeMidpoints.set(edge, newIndex);

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { PrimitiveType } from '../types';
@@ -14,6 +14,7 @@ interface SceneObjectProps {
   isSculptMode: boolean;
   brushSize: number;
   brushStrength: number;
+  selectedRenderMode?: 'shaded' | 'mesh';
   onSelect: (id: string) => void;
   meshRef?: React.MutableRefObject<THREE.Mesh | null>;
 }
@@ -28,6 +29,7 @@ export function SceneObject({
   isSculptMode,
   brushSize,
   brushStrength,
+  selectedRenderMode = 'shaded',
   onSelect,
   meshRef: externalMeshRef,
 }: SceneObjectProps) {
@@ -43,39 +45,31 @@ export function SceneObject({
   const [isHovering, setIsHovering] = useState(false);
   const hoverPointRef = useRef<THREE.Vector3 | null>(null);
   const isProcessing = useRef(false); // Prevent concurrent operations
+  const originalGeometryRef = useRef<THREE.BufferGeometry | null>(null); // Store original for mesh mode
 
   // Create geometry based on primitive type - use state so it can be modified
   const [geometry, setGeometry] = useState<THREE.BufferGeometry>(() => {
-    // Calculate subdivision based on scale (larger = more detail)
-    const avgScale = (scale[0] + scale[1] + scale[2]) / 3;
-    const extraSubdivisions = Math.floor(avgScale * 2);
-
+    // Use same geometry for both shaded and wireframe modes
+    // Balance between smooth shading and clean wireframe
     let geo: THREE.BufferGeometry;
     switch (type) {
       case 'sphere':
-        geo = new THREE.IcosahedronGeometry(1, Math.min(3 + extraSubdivisions, 7));
+        geo = new THREE.SphereGeometry(1, 32, 16); // True sphere with proper curved surface
         break;
       case 'cube':
-        const cubeSegs = Math.min(8 + extraSubdivisions * 3, 20);
-        geo = new THREE.BoxGeometry(1.5, 1.5, 1.5, cubeSegs, cubeSegs, cubeSegs);
+        geo = new THREE.BoxGeometry(1.5, 1.5, 1.5, 4, 4, 4); // More segments for smooth edges
         break;
       case 'cylinder':
-        const cylSegs = Math.min(24 + extraSubdivisions * 4, 64);
-        const cylHeight = Math.min(8 + extraSubdivisions * 2, 20);
-        geo = new THREE.CylinderGeometry(0.7, 0.7, 2, cylSegs, cylHeight);
+        geo = new THREE.CylinderGeometry(0.7, 0.7, 2, 24, 4); // More segments for smoother curves
         break;
       case 'cone':
-        const coneSegs = Math.min(24 + extraSubdivisions * 4, 64);
-        const coneHeight = Math.min(8 + extraSubdivisions * 2, 20);
-        geo = new THREE.ConeGeometry(1, 2, coneSegs, coneHeight);
+        geo = new THREE.ConeGeometry(1, 2, 24, 4); // More segments for smoother curves
         break;
       case 'torus':
-        const torusSegs = Math.min(12 + extraSubdivisions * 2, 32);
-        const torusTube = Math.min(60 + extraSubdivisions * 10, 200);
-        geo = new THREE.TorusGeometry(1, 0.4, torusSegs, torusTube);
+        geo = new THREE.TorusGeometry(1, 0.4, 12, 24); // More segments for smoother curves
         break;
       default:
-        geo = new THREE.IcosahedronGeometry(1, Math.min(3 + extraSubdivisions, 7));
+        geo = new THREE.SphereGeometry(1, 32, 16);
     }
 
     // Make sure position attribute is set up correctly
@@ -228,7 +222,7 @@ export function SceneObject({
         if (distance < brushSize) {
           // Calculate falloff
           const falloff = 1 - (distance / brushSize);
-          const strength = brushStrength * falloff * falloff * 0.02; // Reduced for smoother sculpting
+          const strength = brushStrength * falloff * falloff * 0.1; // Increased for more visible sculpting effect
 
           // Use average normal for deformation direction
           const direction = avgNormal.clone();
@@ -346,40 +340,10 @@ export function SceneObject({
     };
   }, [isSculptMode, isSelected, gl, raycaster, camera]);
 
-  // Sculpt on every frame while mouse is down, or pre-subdivide on hover
+  // Sculpt on every frame while mouse is down
   useFrame(() => {
     if (isMouseDown && isSculptMode && isSelected) {
       sculpt();
-    } else if (isHovering && isSculptMode && isSelected && !isMouseDown && hoverPointRef.current && meshRef.current && !isProcessing.current) {
-      // Pre-subdivide on hover for smoother sculpting
-      const now = Date.now();
-      if (now - lastSubdivisionTime.current > 200) {
-        isProcessing.current = true;
-        const mesh = meshRef.current;
-        const geo = mesh.geometry as THREE.BufferGeometry;
-
-        // Transform hover point to local space
-        const localPoint = hoverPointRef.current.clone();
-        const invMatrix = mesh.matrixWorld.clone().invert();
-        localPoint.applyMatrix4(invMatrix);
-
-        // Pre-subdivide with tighter constraints
-        const subdividedGeo = subdivideGeometryLocally(
-          geo,
-          localPoint,
-          brushSize * 2, // Larger radius to catch edges of large triangles
-          brushSize * 0.1 // Even finer detail for pre-subdivision
-        );
-
-        // Only update if subdivision actually created new vertices
-        if (subdividedGeo.getAttribute('position').count > geo.getAttribute('position').count) {
-          mesh.geometry = subdividedGeo;
-          setGeometry(subdividedGeo);
-          lastSubdivisionTime.current = now;
-          setGeometryVersion(v => v + 1);
-        }
-        isProcessing.current = false;
-      }
     }
   });
 
@@ -390,32 +354,64 @@ export function SceneObject({
     }
   };
 
+  // Determine render mode
+  const showShaded = !isSelected || (isSelected && selectedRenderMode === 'shaded');
+  const showWireframe = isSelected && selectedRenderMode === 'mesh';
+
   return (
     <>
-      <mesh
-        ref={meshRef}
-        position={position}
-        rotation={rotation}
-        scale={scale}
-        geometry={geometry}
-        onPointerDown={handlePointerDown}
-      >
-        <meshStandardMaterial
-          color="#8b7355"
-          roughness={0.7}
-          metalness={0.1}
-        />
-      </mesh>
-      {isSelected && (
-        <lineSegments
-          key={`edges-${geometryVersion}`}
+      {showShaded && (
+        <mesh
+          ref={meshRef}
           position={position}
           rotation={rotation}
           scale={scale}
+          geometry={geometry}
+          onPointerDown={handlePointerDown}
         >
-          <edgesGeometry args={[geometry]} />
-          <lineBasicMaterial color="#4a90e2" linewidth={2} />
-        </lineSegments>
+          <meshStandardMaterial
+            color={isSelected ? "#4a90e2" : "#8b7355"}
+            roughness={0.7}
+            metalness={0.1}
+            flatShading={false}
+          />
+        </mesh>
+      )}
+      {showWireframe && (
+        <>
+          {/* First pass: Render invisible mesh to populate depth buffer */}
+          <mesh
+            position={position}
+            rotation={rotation}
+            scale={scale}
+            geometry={geometry}
+            renderOrder={1}
+          >
+            <meshBasicMaterial
+              colorWrite={false}
+              depthWrite={true}
+              depthTest={true}
+            />
+          </mesh>
+
+          {/* Second pass: Render wireframe that respects depth buffer */}
+          <mesh
+            ref={meshRef}
+            position={position}
+            rotation={rotation}
+            scale={scale}
+            geometry={geometry}
+            onPointerDown={handlePointerDown}
+            renderOrder={2}
+          >
+            <meshBasicMaterial
+              color="#4a90e2"
+              wireframe={true}
+              depthTest={true}
+              depthWrite={false}
+            />
+          </mesh>
+        </>
       )}
     </>
   );

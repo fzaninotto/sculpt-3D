@@ -3,15 +3,21 @@ import type { PrimitiveType, ToolType } from '../types';
 interface ToolbarProps {
   currentTool: ToolType;
   selectedPrimitive: PrimitiveType;
+  selectedRenderMode: 'shaded' | 'mesh';
+  hasSelectedObject: boolean;
   onToolChange: (tool: ToolType) => void;
   onPrimitiveSelect: (primitive: PrimitiveType) => void;
+  onRenderModeChange: (mode: 'shaded' | 'mesh') => void;
 }
 
 export function Toolbar({
   currentTool,
   selectedPrimitive,
+  selectedRenderMode,
+  hasSelectedObject,
   onToolChange,
   onPrimitiveSelect,
+  onRenderModeChange,
 }: ToolbarProps) {
   const tools = [
     { id: 'select', icon: '↖', label: 'Select' },
@@ -111,6 +117,51 @@ export function Toolbar({
               <span style={{ fontSize: '8px', marginTop: '2px' }}>{primitive.label}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Render Mode Toggle (visible when an object is selected) */}
+      {hasSelectedObject && (
+        <div style={{
+          display: 'flex',
+          gap: '5px',
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          padding: '10px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+        }}>
+          <button
+            onClick={() => onRenderModeChange('shaded')}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: selectedRenderMode === 'shaded' ? '#4a90e2' : '#2c2c2c',
+              border: 'none',
+              borderRadius: '6px',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '12px',
+              transition: 'all 0.2s ease',
+            }}
+            title="Show Shaded Surface"
+          >
+            Shaded
+          </button>
+          <button
+            onClick={() => onRenderModeChange('mesh')}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: selectedRenderMode === 'mesh' ? '#4a90e2' : '#2c2c2c',
+              border: 'none',
+              borderRadius: '6px',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '12px',
+              transition: 'all 0.2s ease',
+            }}
+            title="Show Mesh/Wireframe"
+          >
+            Mesh
+          </button>
         </div>
       )}
     </div>
