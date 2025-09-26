@@ -51,27 +51,60 @@ export function SceneObject({
 
   // Create geometry based on primitive type - use state so it can be modified
   const [geometry, setGeometry] = useState<THREE.BufferGeometry>(() => {
-    // Use same geometry for both shaded and wireframe modes
-    // Balance between smooth shading and clean wireframe
+    // Calculate adaptive subdivision based on object scale
+    // Target edge length should be around 0.1 world units for good sculpting
+    const avgScale = (scale[0] + scale[1] + scale[2]) / 3;
+    const targetEdgeLength = 0.1; // Smaller target edge length for finer meshes
+
     let geo: THREE.BufferGeometry;
     switch (type) {
-      case 'sphere':
-        geo = new THREE.SphereGeometry(1, 32, 16); // True sphere with proper curved surface
+      case 'sphere': {
+        // For sphere: circumference = 2πr, so edge length ≈ circumference / segments
+        // segments = circumference / targetEdgeLength = 2πr / targetEdgeLength
+        const radius = avgScale; // sphere radius in world units
+        const circumference = 2 * Math.PI * radius;
+        const widthSegments = Math.max(8, Math.min(128, Math.round(circumference / targetEdgeLength)));
+        const heightSegments = Math.max(6, Math.min(64, Math.round(widthSegments / 2)));
+        geo = new THREE.SphereGeometry(1, widthSegments, heightSegments);
         break;
-      case 'cube':
-        geo = new THREE.BoxGeometry(1.5, 1.5, 1.5, 4, 4, 4); // More segments for smooth edges
+      }
+      case 'cube': {
+        // For cube: edge length = size / segments
+        const size = avgScale * 1.5; // cube is 1.5 units
+        const segments = Math.max(2, Math.min(32, Math.round(size / targetEdgeLength)));
+        geo = new THREE.BoxGeometry(1.5, 1.5, 1.5, segments, segments, segments);
         break;
-      case 'cylinder':
-        geo = new THREE.CylinderGeometry(0.7, 0.7, 2, 24, 4); // More segments for smoother curves
+      }
+      case 'cylinder': {
+        const radius = avgScale * 0.7;
+        const height = avgScale * 2;
+        const radialSegments = Math.max(8, Math.min(64, Math.round(2 * Math.PI * radius / targetEdgeLength)));
+        const heightSegments = Math.max(2, Math.min(32, Math.round(height / targetEdgeLength)));
+        geo = new THREE.CylinderGeometry(0.7, 0.7, 2, radialSegments, heightSegments);
         break;
-      case 'cone':
-        geo = new THREE.ConeGeometry(1, 2, 24, 4); // More segments for smoother curves
+      }
+      case 'cone': {
+        const radius = avgScale * 1;
+        const radialSegments = Math.max(8, Math.min(64, Math.round(2 * Math.PI * radius / targetEdgeLength)));
+        const heightSegments = Math.max(2, Math.min(16, Math.round(2 / targetEdgeLength)));
+        geo = new THREE.ConeGeometry(1, 2, radialSegments, heightSegments);
         break;
-      case 'torus':
-        geo = new THREE.TorusGeometry(1, 0.4, 12, 24); // More segments for smoother curves
+      }
+      case 'torus': {
+        const majorRadius = avgScale * 1;
+        const minorRadius = avgScale * 0.4;
+        const radialSegments = Math.max(6, Math.min(48, Math.round(2 * Math.PI * minorRadius / targetEdgeLength)));
+        const tubularSegments = Math.max(8, Math.min(64, Math.round(2 * Math.PI * majorRadius / targetEdgeLength)));
+        geo = new THREE.TorusGeometry(1, 0.4, radialSegments, tubularSegments);
         break;
-      default:
-        geo = new THREE.SphereGeometry(1, 32, 16);
+      }
+      default: {
+        const radius = avgScale;
+        const circumference = 2 * Math.PI * radius;
+        const widthSegments = Math.max(8, Math.min(128, Math.round(circumference / targetEdgeLength)));
+        const heightSegments = Math.max(6, Math.min(64, Math.round(widthSegments / 2)));
+        geo = new THREE.SphereGeometry(1, widthSegments, heightSegments);
+      }
     }
 
     // Make sure position attribute is set up correctly
@@ -142,12 +175,17 @@ export function SceneObject({
         const invMatrix = mesh.matrixWorld.clone().invert();
         localPoint.applyMatrix4(invMatrix);
 
+        // Transform radius to local space as well
+        const worldScale = mesh.scale.length() / Math.sqrt(3); // Average scale factor
+        const localRadius = (brushSize * 1.5) / worldScale; // Larger to catch complete triangles
+        const localMaxEdge = (brushSize * 0.25) / worldScale; // Finer subdivision for better quality
+
         // Subdivide geometry locally around the sculpting point
         const subdividedGeo = subdivideGeometryLocally(
           geo,
           localPoint,
-          brushSize * 2.5, // Larger radius to catch edges of large triangles
-          brushSize * 0.1 // Much smaller max edge length for finer detail
+          localRadius, // Larger area to ensure complete triangle coverage
+          localMaxEdge // Finer subdivision to avoid thin triangles
         );
 
         // Only update if subdivision actually created new vertices

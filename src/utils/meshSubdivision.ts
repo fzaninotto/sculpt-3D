@@ -116,30 +116,32 @@ export function subdivideGeometryLocally(
     const v2 = vertices[i2];
 
     // Check each edge independently
-    // Edge 01
+    // Edge 01 - only subdivide if significantly longer than target AND within radius
     const edge01Length = v0.distanceTo(v1);
-    if (edge01Length > maxEdgeLength) {
+    if (edge01Length > maxEdgeLength * 1.5) { // More conservative threshold
       const edge01Mid = v0.clone().add(v1).multiplyScalar(0.5);
-      // Check if edge midpoint is within radius OR if edge is too long regardless
-      if (edge01Mid.distanceTo(point) < radius || edge01Length > maxEdgeLength * 2) {
+      // Only subdivide if edge midpoint is within radius
+      if (edge01Mid.distanceTo(point) < radius * 0.8) { // Smaller effective radius
         edgesToSubdivide.add(makeEdgeKey(i0, i1));
       }
     }
 
-    // Edge 12
+    // Edge 12 - only subdivide if significantly longer than target AND within radius
     const edge12Length = v1.distanceTo(v2);
-    if (edge12Length > maxEdgeLength) {
+    if (edge12Length > maxEdgeLength * 1.5) { // More conservative threshold
       const edge12Mid = v1.clone().add(v2).multiplyScalar(0.5);
-      if (edge12Mid.distanceTo(point) < radius || edge12Length > maxEdgeLength * 2) {
+      // Only subdivide if edge midpoint is within radius
+      if (edge12Mid.distanceTo(point) < radius * 0.8) { // Smaller effective radius
         edgesToSubdivide.add(makeEdgeKey(i1, i2));
       }
     }
 
-    // Edge 20
+    // Edge 20 - only subdivide if significantly longer than target AND within radius
     const edge20Length = v2.distanceTo(v0);
-    if (edge20Length > maxEdgeLength) {
+    if (edge20Length > maxEdgeLength * 1.5) { // More conservative threshold
       const edge20Mid = v2.clone().add(v0).multiplyScalar(0.5);
-      if (edge20Mid.distanceTo(point) < radius || edge20Length > maxEdgeLength * 2) {
+      // Only subdivide if edge midpoint is within radius
+      if (edge20Mid.distanceTo(point) < radius * 0.8) { // Smaller effective radius
         edgesToSubdivide.add(makeEdgeKey(i2, i0));
       }
     }
@@ -174,8 +176,37 @@ export function subdivideGeometryLocally(
         if (edgesToSubdivide.has(edge12)) markedCount++;
         if (edgesToSubdivide.has(edge20)) markedCount++;
 
-        // If 2 edges are marked, mark the third for better mesh quality
-        if (markedCount === 2) {
+        // Improve mesh quality by avoiding T-junctions
+        if (markedCount === 1) {
+          // If only 1 edge is marked, check if we should mark another to avoid thin triangles
+          const v0 = vertices[i0];
+          const v1 = vertices[i1];
+          const v2 = vertices[i2];
+
+          // Check triangle quality - if it would create very thin triangles, mark more edges
+          const edge01Length = v0.distanceTo(v1);
+          const edge12Length = v1.distanceTo(v2);
+          const edge20Length = v2.distanceTo(v0);
+          const maxEdge = Math.max(edge01Length, edge12Length, edge20Length);
+          const minEdge = Math.min(edge01Length, edge12Length, edge20Length);
+
+          // If aspect ratio is too high (thin triangle), mark the longest edge too
+          if (maxEdge / minEdge > 3) {
+            if (edge01Length === maxEdge && !edgesToSubdivide.has(edge01) && !edgesToAdd.has(edge01)) {
+              edgesToAdd.add(edge01);
+              changed = true;
+            }
+            if (edge12Length === maxEdge && !edgesToSubdivide.has(edge12) && !edgesToAdd.has(edge12)) {
+              edgesToAdd.add(edge12);
+              changed = true;
+            }
+            if (edge20Length === maxEdge && !edgesToSubdivide.has(edge20) && !edgesToAdd.has(edge20)) {
+              edgesToAdd.add(edge20);
+              changed = true;
+            }
+          }
+        } else if (markedCount === 2) {
+          // If 2 edges are marked, mark the third for better mesh quality
           if (!edgesToSubdivide.has(edge01) && !edgesToAdd.has(edge01)) {
             edgesToAdd.add(edge01);
             changed = true;
