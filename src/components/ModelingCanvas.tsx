@@ -221,6 +221,8 @@ function Scene({
   selectedRenderMode,
   onSelectObject,
   onPlaceObject,
+  onPositionChange,
+  onScaleChange,
   onVertexCountUpdate,
 }: {
   objects: SceneObjectData[];
@@ -232,10 +234,11 @@ function Scene({
   selectedRenderMode: 'shaded' | 'mesh';
   onSelectObject: (id: string | null) => void;
   onPlaceObject: (type: PrimitiveType, position: [number, number, number], scale: number, rotation: [number, number, number]) => void;
+  onPositionChange: (id: string, position: [number, number, number]) => void;
+  onScaleChange: (id: string, scale: [number, number, number]) => void;
   onVertexCountUpdate: (objectId: string, count: number) => void;
 }) {
-  // Find the selected mesh for brush preview
-  const selectedObject = objects.find(obj => obj.id === selectedObjectId);
+  // Ref for the selected mesh for brush preview
   const selectedMeshRef = useRef<THREE.Mesh | null>(null);
   return (
     <>
@@ -265,11 +268,13 @@ function Scene({
           rotation={obj.rotation}
           scale={obj.scale}
           isSelected={obj.id === selectedObjectId}
-          isSculptMode={currentTool === 'sculpt'}
+          currentTool={currentTool}
           brushSize={brushSize}
           brushStrength={brushStrength}
           selectedRenderMode={obj.id === selectedObjectId ? selectedRenderMode : 'shaded'}
           onSelect={onSelectObject}
+          onPositionChange={onPositionChange}
+          onScaleChange={onScaleChange}
           meshRef={obj.id === selectedObjectId ? selectedMeshRef : undefined}
           onVertexCountUpdate={onVertexCountUpdate}
         />
@@ -277,7 +282,8 @@ function Scene({
 
       <BrushPreview
         brushSize={brushSize}
-        isVisible={currentTool === 'sculpt' && selectedObjectId !== null}
+        isVisible={['sculpt', 'remove', 'pinch'].includes(currentTool) && selectedObjectId !== null}
+        currentTool={currentTool}
         targetMesh={selectedMeshRef.current}
       />
 
@@ -410,6 +416,12 @@ export function ModelingCanvas() {
           selectedRenderMode={selectedRenderMode}
           onSelectObject={handleSelectObject}
           onPlaceObject={handlePlaceObject}
+          onPositionChange={(id, position) => {
+            setObjects(prev => prev.map(o => o.id === id ? { ...o, position } : o));
+          }}
+          onScaleChange={(id, scale) => {
+            setObjects(prev => prev.map(o => o.id === id ? { ...o, scale } : o));
+          }}
           onVertexCountUpdate={(objectId, count) => {
             setObjectVertexCounts(prev => ({ ...prev, [objectId]: count }));
           }}
@@ -420,7 +432,7 @@ export function ModelingCanvas() {
           enableRotate={true}
           enableZoom={true}
           mouseButtons={{
-            LEFT: currentTool === 'sculpt' || currentTool === 'add-primitive' ? undefined : THREE.MOUSE.ROTATE,
+            LEFT: ['sculpt', 'remove', 'pinch', 'move', 'scale', 'add-primitive'].includes(currentTool) ? undefined : THREE.MOUSE.ROTATE,
             MIDDLE: THREE.MOUSE.ROTATE,
             RIGHT: THREE.MOUSE.PAN
           }}
@@ -438,6 +450,7 @@ export function ModelingCanvas() {
       <Toolbar
         currentTool={currentTool}
         selectedPrimitive={selectedPrimitive}
+        selectedObjectId={selectedObjectId}
         onToolChange={setCurrentTool}
         onPrimitiveSelect={setSelectedPrimitive}
       />
@@ -459,7 +472,7 @@ export function ModelingCanvas() {
       />
 
       {/* Sculpting Controls Panel */}
-      {currentTool === 'sculpt' && (
+      {['sculpt', 'remove', 'pinch'].includes(currentTool) && (
         <div style={{
           position: 'absolute',
           top: 20,
@@ -471,7 +484,11 @@ export function ModelingCanvas() {
           fontFamily: 'monospace',
           minWidth: '250px'
         }}>
-          <h3 style={{ margin: '0 0 15px 0', fontSize: '14px' }}>Sculpting Controls</h3>
+          <h3 style={{ margin: '0 0 15px 0', fontSize: '14px' }}>
+            {currentTool === 'sculpt' ? 'Sculpt Tool' :
+             currentTool === 'remove' ? 'Remove Tool' :
+             currentTool === 'pinch' ? 'Pinch Tool' : 'Sculpting'} Controls
+          </h3>
 
           {!selectedObjectId && (
             <div style={{

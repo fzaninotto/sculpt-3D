@@ -1,7 +1,7 @@
-import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { PrimitiveType } from '../types';
+import type { PrimitiveType, ToolType } from '../types';
 import { subdivideGeometryLocally } from '../utils/meshSubdivision';
 
 interface SceneObjectProps {
@@ -11,11 +11,13 @@ interface SceneObjectProps {
   rotation: [number, number, number];
   scale: [number, number, number];
   isSelected: boolean;
-  isSculptMode: boolean;
+  currentTool: ToolType;
   brushSize: number;
   brushStrength: number;
   selectedRenderMode?: 'shaded' | 'mesh';
   onSelect: (id: string) => void;
+  onPositionChange?: (id: string, position: [number, number, number]) => void;
+  onScaleChange?: (id: string, scale: [number, number, number]) => void;
   meshRef?: React.MutableRefObject<THREE.Mesh | null>;
   onVertexCountUpdate?: (objectId: string, count: number) => void;
 }
@@ -27,27 +29,31 @@ export function SceneObject({
   rotation,
   scale,
   isSelected,
-  isSculptMode,
+  currentTool,
   brushSize,
   brushStrength,
   selectedRenderMode = 'shaded',
   onSelect,
+  onPositionChange,
+  onScaleChange,
   meshRef: externalMeshRef,
   onVertexCountUpdate,
 }: SceneObjectProps) {
+  // Determine if we're in a sculpting mode
+  const isSculptMode = ['sculpt', 'remove', 'pinch'].includes(currentTool);
+
+  // State for move/scale operations
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ mouse: { x: number, y: number }, position: [number, number, number], scale: [number, number, number] } | null>(null);
   const internalMeshRef = useRef<THREE.Mesh>(null);
   const meshRef = externalMeshRef || internalMeshRef;
   const { raycaster, camera, gl } = useThree();
   const [isMouseDown, setIsMouseDown] = useState(false);
   const mouseRef = useRef({ x: 0, y: 0 });
-  const [geometryVersion, setGeometryVersion] = useState(0);
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
   const lastSubdivisionTime = useRef(0);
   const isShiftPressed = useRef(false);
-  const [isHovering, setIsHovering] = useState(false);
-  const hoverPointRef = useRef<THREE.Vector3 | null>(null);
   const isProcessing = useRef(false); // Prevent concurrent operations
-  const originalGeometryRef = useRef<THREE.BufferGeometry | null>(null); // Store original for mesh mode
 
   // Create geometry based on primitive type - use state so it can be modified
   const [geometry, setGeometry] = useState<THREE.BufferGeometry>(() => {
@@ -268,11 +274,32 @@ export function SceneObject({
           const falloff = 1 - (distance / brushSize);
           const strength = brushStrength * falloff * falloff * 0.1; // Increased for more visible sculpting effect
 
-          // Use average normal for deformation direction
-          const direction = avgNormal.clone();
+          // Calculate direction based on tool type
+          let direction: THREE.Vector3;
+          let multiplier = strength;
 
-          // Invert direction if shift is pressed (pull instead of push)
-          const multiplier = isShiftPressed.current ? -strength : strength;
+          if (currentTool === 'pinch') {
+            // Pinch tool: move vertices toward brush center (radial displacement)
+            direction = point.clone().sub(vertex).normalize();
+            // For pinch, strength is always positive (pulling toward center)
+            // Shift key can invert to push away from center
+            if (isShiftPressed.current) {
+              multiplier = -strength;
+            }
+          } else {
+            // Normal sculpt/remove: use surface normal
+            direction = avgNormal.clone();
+
+            // Remove tool inverts the direction (subtractive sculpting)
+            if (currentTool === 'remove') {
+              multiplier = -strength;
+            }
+
+            // Shift key inverts the current direction
+            if (isShiftPressed.current) {
+              multiplier = -multiplier;
+            }
+          }
 
           // Apply deformation in world space
           vertex.add(direction.multiplyScalar(multiplier));
@@ -295,8 +322,6 @@ export function SceneObject({
         geo.computeVertexNormals();
         geo.computeBoundingBox();
         geo.computeBoundingSphere();
-        // Force edge geometry update
-        setGeometryVersion(v => v + 1);
       }
     }
 
@@ -346,6 +371,10 @@ export function SceneObject({
 
     const handleMouseUp = () => {
       setIsMouseDown(false);
+      if (isDragging) {
+        setIsDragging(false);
+        dragStartRef.current = null;
+      }
     };
 
     const handleMouseMove = (event: MouseEvent) => {
@@ -353,23 +382,60 @@ export function SceneObject({
       mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-      // Pre-subdivide on hover when in sculpt mode
-      if (!isMouseDown && meshRef.current) {
-        const mesh = meshRef.current;
-        raycaster.setFromCamera(new THREE.Vector2(mouseRef.current.x, mouseRef.current.y), camera);
-        const intersects = raycaster.intersectObject(mesh);
+      // Handle drag operations for move/scale tools
+      if (isDragging && dragStartRef.current && isSelected) {
+        const deltaX = mouseRef.current.x - dragStartRef.current.mouse.x;
+        const deltaY = mouseRef.current.y - dragStartRef.current.mouse.y;
 
-        if (intersects.length > 0) {
-          setIsHovering(true);
-          hoverPointRef.current = intersects[0].point;
-        } else {
-          setIsHovering(false);
-          hoverPointRef.current = null;
+        if (currentTool === 'move') {
+          // Calculate movement that scales properly with camera distance
+          const objectPos = new THREE.Vector3(...dragStartRef.current.position);
+          const cameraDistance = camera.position.distanceTo(objectPos);
+
+          // Project object position to screen coordinates to get depth-correct scaling
+          const screenVector = new THREE.Vector3();
+          screenVector.copy(objectPos);
+          screenVector.project(camera);
+
+          // Calculate movement scaling based on camera distance and FOV
+          const fov = camera.fov * Math.PI / 180; // Convert to radians
+          const scaleFactor = 2 * cameraDistance * Math.tan(fov / 2);
+
+          // Get camera's right and up vectors in world space
+          const cameraMatrix = camera.matrixWorld;
+          const cameraRight = new THREE.Vector3().setFromMatrixColumn(cameraMatrix, 0);
+          const cameraUp = new THREE.Vector3().setFromMatrixColumn(cameraMatrix, 1);
+
+          // Calculate movement vector with proper scaling
+          const movement = new THREE.Vector3()
+            .addScaledVector(cameraRight, deltaX * scaleFactor)
+            .addScaledVector(cameraUp, deltaY * scaleFactor);
+
+          // Apply movement to original position
+          const originalPos = new THREE.Vector3(...dragStartRef.current.position);
+          const newPos = originalPos.add(movement);
+
+          const newPosition: [number, number, number] = [newPos.x, newPos.y, newPos.z];
+          onPositionChange?.(id, newPosition);
+        } else if (currentTool === 'scale') {
+          // Scale based on distance from center
+          const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+          const scaleFactor = Math.max(0.1, 1 + distance * (deltaY > 0 ? -1 : 1)); // Scale down when dragging down
+          const newScale: [number, number, number] = [
+            dragStartRef.current.scale[0] * scaleFactor,
+            dragStartRef.current.scale[1] * scaleFactor,
+            dragStartRef.current.scale[2] * scaleFactor
+          ];
+          onScaleChange?.(id, newScale);
         }
       }
+
     };
 
-    if (isSculptMode && isSelected) {
+    // Attach mouse events for sculpting when selected, or always for move/scale tools
+    const needsMouseEvents = (isSculptMode && isSelected) || (currentTool === 'move' || currentTool === 'scale');
+
+    if (needsMouseEvents) {
       canvas.addEventListener('mousedown', handleMouseDown);
       canvas.addEventListener('mouseup', handleMouseUp);
       canvas.addEventListener('mouseleave', handleMouseUp);
@@ -382,7 +448,7 @@ export function SceneObject({
       canvas.removeEventListener('mouseleave', handleMouseUp);
       canvas.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [isSculptMode, isSelected, gl, raycaster, camera]);
+  }, [currentTool, isSculptMode, isSelected, isDragging, gl, raycaster, camera]);
 
   // Sculpt on every frame while mouse is down
   useFrame(() => {
@@ -392,9 +458,28 @@ export function SceneObject({
   });
 
   const handlePointerDown = (e: any) => {
-    if (!isSculptMode && e.button === 0) {
+    if (e.button === 0) {
       e.stopPropagation();
-      onSelect(id);
+
+      if (currentTool === 'select') {
+        onSelect(id);
+      } else if (currentTool === 'move' || currentTool === 'scale') {
+        // Select object and start drag operation immediately
+        onSelect(id);
+
+        const rect = gl.domElement.getBoundingClientRect();
+        const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+        setIsDragging(true);
+        dragStartRef.current = {
+          mouse: { x: mouseX, y: mouseY },
+          position: [...position],
+          scale: [...scale]
+        };
+      } else if (!isSculptMode) {
+        onSelect(id);
+      }
     }
   };
 

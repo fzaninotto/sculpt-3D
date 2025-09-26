@@ -3,6 +3,7 @@ import type { PrimitiveType, ToolType } from '../types';
 interface ToolbarProps {
   currentTool: ToolType;
   selectedPrimitive: PrimitiveType;
+  selectedObjectId: string | null;
   onToolChange: (tool: ToolType) => void;
   onPrimitiveSelect: (primitive: PrimitiveType) => void;
 }
@@ -10,13 +11,18 @@ interface ToolbarProps {
 export function Toolbar({
   currentTool,
   selectedPrimitive,
+  selectedObjectId,
   onToolChange,
   onPrimitiveSelect,
 }: ToolbarProps) {
   const tools = [
     { id: 'select', icon: '↖', label: 'Select' },
     { id: 'add-primitive', icon: '⊕', label: 'Add Shape' },
+    { id: 'move', icon: '⇄', label: 'Move' },
+    { id: 'scale', icon: '⊞', label: 'Scale' },
     { id: 'sculpt', icon: '✏', label: 'Sculpt' },
+    { id: 'remove', icon: '⊖', label: 'Remove' },
+    { id: 'pinch', icon: '⤇', label: 'Pinch' },
   ] as const;
 
   const primitives = [
@@ -47,31 +53,36 @@ export function Toolbar({
         borderRadius: '8px',
         boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
       }}>
-        {tools.map((tool) => (
-          <button
-            key={tool.id}
-            onClick={() => onToolChange(tool.id as ToolType)}
-            style={{
-              width: '50px',
-              height: '50px',
-              backgroundColor: currentTool === tool.id ? '#4a90e2' : '#2c2c2c',
-              border: 'none',
-              borderRadius: '6px',
-              color: 'white',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s ease',
-              fontSize: '20px',
-            }}
-            title={tool.label}
-          >
-            <span>{tool.icon}</span>
-            <span style={{ fontSize: '9px', marginTop: '2px' }}>{tool.label}</span>
-          </button>
-        ))}
+        {tools.map((tool) => {
+          const isDisabled = (tool.id === 'move' || tool.id === 'scale') && selectedObjectId === null;
+          return (
+            <button
+              key={tool.id}
+              onClick={() => !isDisabled && onToolChange(tool.id as ToolType)}
+              disabled={isDisabled}
+              style={{
+                width: '50px',
+                height: '50px',
+                backgroundColor: currentTool === tool.id ? '#4a90e2' : isDisabled ? '#1a1a1a' : '#2c2c2c',
+                border: 'none',
+                borderRadius: '6px',
+                color: isDisabled ? '#666' : 'white',
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+                fontSize: '20px',
+                opacity: isDisabled ? 0.5 : 1,
+              }}
+              title={isDisabled ? `${tool.label} (Select an object first)` : tool.label}
+            >
+              <span>{tool.icon}</span>
+              <span style={{ fontSize: '9px', marginTop: '2px' }}>{tool.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Primitive Selection (visible when add-primitive tool is selected) */}

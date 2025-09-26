@@ -18,7 +18,7 @@ export function subdivideGeometryLocally(
   }
 
   const positionsArray = positions.array as Float32Array;
-  const indexArray = indices.array as number[];
+  const indexArray = Array.from(indices.array);
 
   // Convert to vertices
   const vertices: THREE.Vector3[] = [];

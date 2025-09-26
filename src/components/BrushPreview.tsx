@@ -1,10 +1,12 @@
 import { useRef, useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import type { ToolType } from '../types';
 
 interface BrushPreviewProps {
   brushSize: number;
   isVisible: boolean;
+  currentTool: ToolType;
   targetMesh?: THREE.Mesh | null;
 }
 
@@ -13,7 +15,16 @@ interface AdjacencyData {
   faceNeighbors: Map<number, Set<number>>;
 }
 
-export function BrushPreview({ brushSize, isVisible, targetMesh }: BrushPreviewProps) {
+export function BrushPreview({ brushSize, isVisible, currentTool, targetMesh }: BrushPreviewProps) {
+  // Determine brush color based on tool
+  const getBrushColor = () => {
+    switch (currentTool) {
+      case 'sculpt': return '#4a90e2'; // Blue for additive
+      case 'remove': return '#e24a4a'; // Red for subtractive
+      case 'pinch': return '#e2a44a'; // Orange for pinch
+      default: return '#4a90e2';
+    }
+  };
   const ringRef = useRef<THREE.Mesh>(null);
   const { raycaster, camera, gl } = useThree();
   const mouseRef = useRef({ x: 0, y: 0 });
@@ -250,7 +261,7 @@ export function BrushPreview({ brushSize, isVisible, targetMesh }: BrushPreviewP
       {/* Main ring outline */}
       <mesh ref={ringRef} geometry={ringGeometry}>
         <meshBasicMaterial
-          color="#4a90e2"
+          color={getBrushColor()}
           transparent
           opacity={0.4}
           side={THREE.DoubleSide}
