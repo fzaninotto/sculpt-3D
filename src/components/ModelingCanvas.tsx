@@ -282,7 +282,7 @@ function Scene({
 
       <BrushPreview
         brushSize={brushSize}
-        isVisible={['add', 'subtract', 'pinch'].includes(currentTool) && selectedObjectId !== null}
+        isVisible={['add', 'subtract', 'push'].includes(currentTool) && selectedObjectId !== null}
         currentTool={currentTool}
         targetMesh={selectedMeshRef.current}
       />
@@ -432,7 +432,7 @@ export function ModelingCanvas() {
           enableRotate={true}
           enableZoom={true}
           mouseButtons={{
-            LEFT: ['add', 'subtract', 'pinch', 'move', 'scale', 'add-primitive'].includes(currentTool) ? undefined : THREE.MOUSE.ROTATE,
+            LEFT: ['add', 'subtract', 'push', 'move', 'scale', 'add-primitive'].includes(currentTool) ? undefined : THREE.MOUSE.ROTATE,
             MIDDLE: THREE.MOUSE.ROTATE,
             RIGHT: THREE.MOUSE.PAN
           }}
@@ -472,7 +472,7 @@ export function ModelingCanvas() {
       />
 
       {/* Sculpting Controls Panel */}
-      {['add', 'subtract', 'pinch'].includes(currentTool) && (
+      {['add', 'subtract', 'push'].includes(currentTool) && (
         <div style={{
           position: 'absolute',
           top: 20,
@@ -487,7 +487,7 @@ export function ModelingCanvas() {
           <h3 style={{ margin: '0 0 15px 0', fontSize: '14px' }}>
             {currentTool === 'add' ? 'Add Tool' :
              currentTool === 'subtract' ? 'Subtract Tool' :
-             currentTool === 'pinch' ? 'Pinch Tool' : 'Sculpting'} Controls
+             currentTool === 'push' ? 'Push Tool' : 'Sculpting'} Controls
           </h3>
 
           {!selectedObjectId && (
@@ -575,7 +575,7 @@ export function ModelingCanvas() {
           {currentTool === 'add-primitive' && `Click and drag to place ${selectedPrimitive}`}
           {currentTool === 'add' && 'Hold left-click to add material • Hold Shift to subtract'}
           {currentTool === 'subtract' && 'Hold left-click to subtract material • Hold Shift to add'}
-          {currentTool === 'pinch' && 'Hold left-click to pinch inward • Hold Shift to push outward'}
+          {currentTool === 'push' && 'Hold left-click and drag to push • Hold Shift to pull'}
         </div>
         <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
           <div><strong>Camera Controls:</strong></div>

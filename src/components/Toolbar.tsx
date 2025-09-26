@@ -17,12 +17,12 @@ export function Toolbar({
 }: ToolbarProps) {
   const tools = [
     { id: 'select', icon: '↖', label: 'Select' },
-    { id: 'add-primitive', icon: '⊕', label: 'Add Shape' },
+    { id: 'add-primitive', icon: '◉', label: 'Add Shape' },
     { id: 'move', icon: '✥', label: 'Move' },
     { id: 'scale', icon: '⤢', label: 'Scale' },
-    { id: 'add', icon: '↗', label: 'Add' },
-    { id: 'subtract', icon: '↙', label: 'Subtract' },
-    { id: 'pinch', icon: '⤇', label: 'Pinch' },
+    { id: 'add', icon: '+', label: 'Add' },
+    { id: 'subtract', icon: '−', label: 'Subtract' },
+    { id: 'push', icon: '→', label: 'Push' },
   ] as const;
 
   const primitives = [
@@ -54,7 +54,7 @@ export function Toolbar({
         boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
       }}>
         {tools.map((tool) => {
-          const objectDependentTools = ['move', 'scale', 'add', 'subtract', 'pinch'];
+          const objectDependentTools = ['move', 'scale', 'add', 'subtract', 'push'];
           const isDisabled = objectDependentTools.includes(tool.id) && selectedObjectId === null;
           return (
             <button

@@ -40,7 +40,7 @@ export function SceneObject({
   onVertexCountUpdate,
 }: SceneObjectProps) {
   // Determine if we're in a sculpting mode
-  const isSculptMode = ['add', 'subtract', 'pinch'].includes(currentTool);
+  const isSculptMode = ['add', 'subtract', 'push'].includes(currentTool);
 
   // State for move/scale operations
   const [isDragging, setIsDragging] = useState(false);
@@ -54,6 +54,7 @@ export function SceneObject({
   const lastSubdivisionTime = useRef(0);
   const isShiftPressed = useRef(false);
   const isProcessing = useRef(false); // Prevent concurrent operations
+  const pushToolLastPoint = useRef<THREE.Vector3 | null>(null); // Track last intersection for push tool
 
   // Create geometry based on primitive type - use state so it can be modified
   const [geometry, setGeometry] = useState<THREE.BufferGeometry>(() => {
@@ -279,13 +280,30 @@ export function SceneObject({
           let direction: THREE.Vector3;
           let multiplier = strength;
 
-          if (currentTool === 'pinch') {
-            // Pinch tool: move vertices toward brush center (radial displacement)
-            direction = point.clone().sub(vertex).normalize();
-            // For pinch, strength is always positive (pulling toward center)
-            // Shift key can invert to push away from center
-            if (isShiftPressed.current) {
-              multiplier = -strength;
+          if (currentTool === 'push') {
+            // Push tool: move vertices in the direction of mouse drag in 3D
+            if (pushToolLastPoint.current) {
+              // Calculate the 3D movement direction
+              direction = point.clone().sub(pushToolLastPoint.current);
+
+              // If there's no significant movement, skip
+              if (direction.length() < 0.001) {
+                continue;
+              }
+
+              direction.normalize();
+
+              // Scale strength based on actual mouse movement speed
+              const moveDistance = point.distanceTo(pushToolLastPoint.current);
+              multiplier = strength * Math.min(moveDistance * 10, 2.0); // Cap the multiplier
+
+              // Invert with shift key
+              if (isShiftPressed.current) {
+                multiplier = -multiplier;
+              }
+            } else {
+              // No previous point, skip this vertex
+              continue;
             }
           } else {
             // Normal sculpt/remove: use surface normal
@@ -323,6 +341,11 @@ export function SceneObject({
         geo.computeVertexNormals();
         geo.computeBoundingBox();
         geo.computeBoundingSphere();
+      }
+
+      // Update push tool tracking
+      if (currentTool === 'push') {
+        pushToolLastPoint.current = point.clone();
       }
     }
 
@@ -375,6 +398,10 @@ export function SceneObject({
       if (isDragging) {
         setIsDragging(false);
         dragStartRef.current = null;
+      }
+      // Reset push tool tracking
+      if (currentTool === 'push') {
+        pushToolLastPoint.current = null;
       }
     };
 

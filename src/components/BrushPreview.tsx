@@ -21,7 +21,7 @@ export function BrushPreview({ brushSize, isVisible, currentTool, targetMesh }: 
     switch (currentTool) {
       case 'add': return '#4a90e2'; // Blue for additive
       case 'subtract': return '#e24a4a'; // Red for subtractive
-      case 'pinch': return '#e2a44a'; // Orange for pinch
+      case 'push': return '#e2a44a'; // Orange for push
       default: return '#4a90e2';
     }
   };
