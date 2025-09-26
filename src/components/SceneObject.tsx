@@ -17,6 +17,7 @@ interface SceneObjectProps {
   selectedRenderMode?: 'shaded' | 'mesh';
   onSelect: (id: string) => void;
   meshRef?: React.MutableRefObject<THREE.Mesh | null>;
+  onVertexCountUpdate?: (objectId: string, count: number) => void;
 }
 
 export function SceneObject({
@@ -32,6 +33,7 @@ export function SceneObject({
   selectedRenderMode = 'shaded',
   onSelect,
   meshRef: externalMeshRef,
+  onVertexCountUpdate,
 }: SceneObjectProps) {
   const internalMeshRef = useRef<THREE.Mesh>(null);
   const meshRef = externalMeshRef || internalMeshRef;
@@ -95,10 +97,14 @@ export function SceneObject({
     return geo;
   });
 
-  // Update geometry ref when geometry changes
+  // Update geometry ref when geometry changes and report vertex count
   useEffect(() => {
     geometryRef.current = geometry;
-  }, [geometry]);
+    if (onVertexCountUpdate) {
+      const vertexCount = geometry.getAttribute('position')?.count || 0;
+      onVertexCountUpdate(id, vertexCount);
+    }
+  }, [geometry, id, onVertexCountUpdate]);
 
   const sculpt = useCallback(() => {
     if (!meshRef.current || !isSelected || !isSculptMode || !isMouseDown) {

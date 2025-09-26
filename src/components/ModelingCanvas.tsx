@@ -6,6 +6,7 @@ import { Toolbar } from './Toolbar';
 import { SceneObject } from './SceneObject';
 import { PlacementPreview } from './PlacementPreview';
 import { BrushPreview } from './BrushPreview';
+import { ObjectSidebar } from './ObjectSidebar';
 import type { PrimitiveType, ToolType } from '../types';
 
 function AxesHelper() {
@@ -220,6 +221,7 @@ function Scene({
   selectedRenderMode,
   onSelectObject,
   onPlaceObject,
+  onVertexCountUpdate,
 }: {
   objects: SceneObjectData[];
   selectedObjectId: string | null;
@@ -230,6 +232,7 @@ function Scene({
   selectedRenderMode: 'shaded' | 'mesh';
   onSelectObject: (id: string | null) => void;
   onPlaceObject: (type: PrimitiveType, position: [number, number, number], scale: number, rotation: [number, number, number]) => void;
+  onVertexCountUpdate: (objectId: string, count: number) => void;
 }) {
   // Find the selected mesh for brush preview
   const selectedObject = objects.find(obj => obj.id === selectedObjectId);
@@ -268,6 +271,7 @@ function Scene({
           selectedRenderMode={obj.id === selectedObjectId ? selectedRenderMode : 'shaded'}
           onSelect={onSelectObject}
           meshRef={obj.id === selectedObjectId ? selectedMeshRef : undefined}
+          onVertexCountUpdate={onVertexCountUpdate}
         />
       ))}
 
@@ -295,6 +299,7 @@ export function ModelingCanvas() {
   const [objects, setObjects] = useState<SceneObjectData[]>([]);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedRenderMode, setSelectedRenderMode] = useState<'shaded' | 'mesh'>('shaded');
+  const [objectVertexCounts, setObjectVertexCounts] = useState<Record<string, number>>({});
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -346,6 +351,43 @@ export function ModelingCanvas() {
     }
   };
 
+  const handleDeleteObject = () => {
+    if (selectedObjectId) {
+      setObjects(prev => prev.filter(obj => obj.id !== selectedObjectId));
+      setSelectedObjectId(null);
+    }
+  };
+
+  const handleObjectPositionChange = (position: [number, number, number]) => {
+    if (selectedObjectId) {
+      setObjects(prev => prev.map(obj =>
+        obj.id === selectedObjectId
+          ? { ...obj, position }
+          : obj
+      ));
+    }
+  };
+
+  const handleObjectRotationChange = (rotation: [number, number, number]) => {
+    if (selectedObjectId) {
+      setObjects(prev => prev.map(obj =>
+        obj.id === selectedObjectId
+          ? { ...obj, rotation }
+          : obj
+      ));
+    }
+  };
+
+  const handleObjectScaleChange = (scale: [number, number, number]) => {
+    if (selectedObjectId) {
+      setObjects(prev => prev.map(obj =>
+        obj.id === selectedObjectId
+          ? { ...obj, scale }
+          : obj
+      ));
+    }
+  };
+
   const handleCanvasClick = (e: any) => {
     if (currentTool === 'select' && e.target === e.currentTarget) {
       setSelectedObjectId(null);
@@ -368,6 +410,9 @@ export function ModelingCanvas() {
           selectedRenderMode={selectedRenderMode}
           onSelectObject={handleSelectObject}
           onPlaceObject={handlePlaceObject}
+          onVertexCountUpdate={(objectId, count) => {
+            setObjectVertexCounts(prev => ({ ...prev, [objectId]: count }));
+          }}
         />
         <OrbitControls
           ref={controlsRef}
@@ -393,11 +438,24 @@ export function ModelingCanvas() {
       <Toolbar
         currentTool={currentTool}
         selectedPrimitive={selectedPrimitive}
-        selectedRenderMode={selectedRenderMode}
-        hasSelectedObject={selectedObjectId !== null}
         onToolChange={setCurrentTool}
         onPrimitiveSelect={setSelectedPrimitive}
+      />
+
+      {/* Object Sidebar */}
+      <ObjectSidebar
+        selectedObjectId={selectedObjectId}
+        selectedObjectType={objects.find(obj => obj.id === selectedObjectId)?.type}
+        selectedRenderMode={selectedRenderMode}
+        vertexCount={selectedObjectId ? (objectVertexCounts[selectedObjectId] || 0) : 0}
+        position={objects.find(obj => obj.id === selectedObjectId)?.position || [0, 0, 0]}
+        rotation={objects.find(obj => obj.id === selectedObjectId)?.rotation || [0, 0, 0]}
+        scale={objects.find(obj => obj.id === selectedObjectId)?.scale || [1, 1, 1]}
         onRenderModeChange={setSelectedRenderMode}
+        onDeleteObject={handleDeleteObject}
+        onPositionChange={handleObjectPositionChange}
+        onRotationChange={handleObjectRotationChange}
+        onScaleChange={handleObjectScaleChange}
       />
 
       {/* Sculpting Controls Panel */}
