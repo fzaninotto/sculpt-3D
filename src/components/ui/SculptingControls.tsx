@@ -65,7 +65,7 @@ export function SculptingControls({
               <input
                 type="range"
                 min="0.1"
-                max="2"
+                max="5"
                 step="0.1"
                 value={brushSize}
                 onChange={(e) => onBrushSizeChange(parseFloat(e.target.value))}

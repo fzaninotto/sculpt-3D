@@ -249,7 +249,7 @@ export function useSculpting({
 
         if (distance < brushSize) {
           const falloff = 1 - (distance / brushSize);
-          const strength = brushStrength * falloff * falloff * 0.1;
+          const strength = brushStrength * falloff * falloff * 0.2;
 
           let direction: THREE.Vector3;
           let multiplier = strength;
@@ -298,7 +298,7 @@ export function useSculpting({
               direction.normalize();
 
               const moveDistance = point.distanceTo(pushToolLastPoint.current);
-              multiplier = strength * Math.min(moveDistance * 10, 2.0);
+              multiplier = strength * Math.min(moveDistance * 25, 5.0);
               if (isShiftPressed.current) multiplier = -multiplier;
             } else {
               continue;

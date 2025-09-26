@@ -42,7 +42,7 @@ export function ModelingCanvas() {
       if (event.key === '[') {
         setBrushSize(prev => Math.max(0.1, prev - 0.1));
       } else if (event.key === ']') {
-        setBrushSize(prev => Math.min(2, prev + 0.1));
+        setBrushSize(prev => Math.min(5, prev + 0.1));
       } else if (event.key === '{' || (event.shiftKey && event.key === '[')) {
         setBrushStrength(prev => Math.max(0.1, prev - 0.2));
       } else if (event.key === '}' || (event.shiftKey && event.key === ']')) {
