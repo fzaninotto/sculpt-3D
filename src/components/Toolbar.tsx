@@ -18,10 +18,10 @@ export function Toolbar({
   const tools = [
     { id: 'select', icon: '↖', label: 'Select' },
     { id: 'add-primitive', icon: '⊕', label: 'Add Shape' },
-    { id: 'move', icon: '⇄', label: 'Move' },
-    { id: 'scale', icon: '⊞', label: 'Scale' },
-    { id: 'sculpt', icon: '✏', label: 'Sculpt' },
-    { id: 'remove', icon: '⊖', label: 'Remove' },
+    { id: 'move', icon: '✥', label: 'Move' },
+    { id: 'scale', icon: '⤢', label: 'Scale' },
+    { id: 'add', icon: '↗', label: 'Add' },
+    { id: 'subtract', icon: '↙', label: 'Subtract' },
     { id: 'pinch', icon: '⤇', label: 'Pinch' },
   ] as const;
 
@@ -54,7 +54,8 @@ export function Toolbar({
         boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
       }}>
         {tools.map((tool) => {
-          const isDisabled = (tool.id === 'move' || tool.id === 'scale') && selectedObjectId === null;
+          const objectDependentTools = ['move', 'scale', 'add', 'subtract', 'pinch'];
+          const isDisabled = objectDependentTools.includes(tool.id) && selectedObjectId === null;
           return (
             <button
               key={tool.id}

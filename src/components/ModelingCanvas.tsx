@@ -282,7 +282,7 @@ function Scene({
 
       <BrushPreview
         brushSize={brushSize}
-        isVisible={['sculpt', 'remove', 'pinch'].includes(currentTool) && selectedObjectId !== null}
+        isVisible={['add', 'subtract', 'pinch'].includes(currentTool) && selectedObjectId !== null}
         currentTool={currentTool}
         targetMesh={selectedMeshRef.current}
       />
@@ -328,7 +328,7 @@ export function ModelingCanvas() {
       } else if (event.key === 'a' && !event.ctrlKey && !event.metaKey) {
         setCurrentTool('add-primitive');
       } else if (event.key === 'b' && !event.ctrlKey && !event.metaKey) {
-        setCurrentTool('sculpt');
+        setCurrentTool('add');
       }
     };
 
@@ -348,7 +348,7 @@ export function ModelingCanvas() {
     };
     setObjects(prev => [...prev, newObject]);
     setSelectedObjectId(newObject.id);
-    setCurrentTool('sculpt');
+    setCurrentTool('add');
   }, []);
 
   const handleSelectObject = (id: string | null) => {
@@ -432,7 +432,7 @@ export function ModelingCanvas() {
           enableRotate={true}
           enableZoom={true}
           mouseButtons={{
-            LEFT: ['sculpt', 'remove', 'pinch', 'move', 'scale', 'add-primitive'].includes(currentTool) ? undefined : THREE.MOUSE.ROTATE,
+            LEFT: ['add', 'subtract', 'pinch', 'move', 'scale', 'add-primitive'].includes(currentTool) ? undefined : THREE.MOUSE.ROTATE,
             MIDDLE: THREE.MOUSE.ROTATE,
             RIGHT: THREE.MOUSE.PAN
           }}
@@ -472,7 +472,7 @@ export function ModelingCanvas() {
       />
 
       {/* Sculpting Controls Panel */}
-      {['sculpt', 'remove', 'pinch'].includes(currentTool) && (
+      {['add', 'subtract', 'pinch'].includes(currentTool) && (
         <div style={{
           position: 'absolute',
           top: 20,
@@ -485,8 +485,8 @@ export function ModelingCanvas() {
           minWidth: '250px'
         }}>
           <h3 style={{ margin: '0 0 15px 0', fontSize: '14px' }}>
-            {currentTool === 'sculpt' ? 'Sculpt Tool' :
-             currentTool === 'remove' ? 'Remove Tool' :
+            {currentTool === 'add' ? 'Add Tool' :
+             currentTool === 'subtract' ? 'Subtract Tool' :
              currentTool === 'pinch' ? 'Pinch Tool' : 'Sculpting'} Controls
           </h3>
 
@@ -573,7 +573,9 @@ export function ModelingCanvas() {
         <div style={{ marginTop: '5px' }}>
           {currentTool === 'select' && 'Click objects to select'}
           {currentTool === 'add-primitive' && `Click and drag to place ${selectedPrimitive}`}
-          {currentTool === 'sculpt' && 'Hold left-click to sculpt • Hold Shift to pull'}
+          {currentTool === 'add' && 'Hold left-click to add material • Hold Shift to subtract'}
+          {currentTool === 'subtract' && 'Hold left-click to subtract material • Hold Shift to add'}
+          {currentTool === 'pinch' && 'Hold left-click to pinch inward • Hold Shift to push outward'}
         </div>
         <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
           <div><strong>Camera Controls:</strong></div>

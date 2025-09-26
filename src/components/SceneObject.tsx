@@ -40,7 +40,7 @@ export function SceneObject({
   onVertexCountUpdate,
 }: SceneObjectProps) {
   // Determine if we're in a sculpting mode
-  const isSculptMode = ['sculpt', 'remove', 'pinch'].includes(currentTool);
+  const isSculptMode = ['add', 'subtract', 'pinch'].includes(currentTool);
 
   // State for move/scale operations
   const [isDragging, setIsDragging] = useState(false);
@@ -290,8 +290,8 @@ export function SceneObject({
             // Normal sculpt/remove: use surface normal
             direction = avgNormal.clone();
 
-            // Remove tool inverts the direction (subtractive sculpting)
-            if (currentTool === 'remove') {
+            // Subtract tool inverts the direction (subtractive sculpting)
+            if (currentTool === 'subtract') {
               multiplier = -strength;
             }
 
@@ -398,8 +398,15 @@ export function SceneObject({
           screenVector.project(camera);
 
           // Calculate movement scaling based on camera distance and FOV
-          const fov = camera.fov * Math.PI / 180; // Convert to radians
-          const scaleFactor = 2 * cameraDistance * Math.tan(fov / 2);
+          let scaleFactor: number;
+          if ('fov' in camera) {
+            // Perspective camera
+            const fov = camera.fov * Math.PI / 180; // Convert to radians
+            scaleFactor = 2 * cameraDistance * Math.tan(fov / 2);
+          } else {
+            // Orthographic camera - use a simple scale factor
+            scaleFactor = cameraDistance * 0.5;
+          }
 
           // Get camera's right and up vectors in world space
           const cameraMatrix = camera.matrixWorld;

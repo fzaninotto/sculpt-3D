@@ -19,8 +19,8 @@ export function BrushPreview({ brushSize, isVisible, currentTool, targetMesh }: 
   // Determine brush color based on tool
   const getBrushColor = () => {
     switch (currentTool) {
-      case 'sculpt': return '#4a90e2'; // Blue for additive
-      case 'remove': return '#e24a4a'; // Red for subtractive
+      case 'add': return '#4a90e2'; // Blue for additive
+      case 'subtract': return '#e24a4a'; // Red for subtractive
       case 'pinch': return '#e2a44a'; // Orange for pinch
       default: return '#4a90e2';
     }
