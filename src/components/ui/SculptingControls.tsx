@@ -6,8 +6,10 @@ interface SculptingControlsProps {
   brushSize: number;
   brushStrength: number;
   selectedObjectId: string | null;
+  symmetryAxes: { x: boolean; y: boolean; z: boolean };
   onBrushSizeChange: (size: number) => void;
   onBrushStrengthChange: (strength: number) => void;
+  onSymmetryChange: (axis: 'x' | 'y' | 'z', enabled: boolean) => void;
 }
 
 export function SculptingControls({
@@ -15,8 +17,10 @@ export function SculptingControls({
   brushSize,
   brushStrength,
   selectedObjectId,
+  symmetryAxes,
   onBrushSizeChange,
   onBrushStrengthChange,
+  onSymmetryChange,
 }: SculptingControlsProps) {
   const toolDef = getToolDefinition(currentTool);
 
@@ -85,6 +89,50 @@ export function SculptingControls({
             </label>
           </div>
 
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ display: 'block', marginBottom: '8px' }}>
+              <strong>Symmetry:</strong>
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {(['x', 'y', 'z'] as const).map(axis => (
+                <button
+                  key={axis}
+                  onClick={() => onSymmetryChange(axis, !symmetryAxes[axis])}
+                  style={{
+                    flex: 1,
+                    padding: '6px',
+                    backgroundColor: symmetryAxes[axis] ? '#4a90e2' : '#2c2c2c',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    fontSize: '12px',
+                    fontWeight: symmetryAxes[axis] ? 'bold' : 'normal',
+                    boxShadow: symmetryAxes[axis] ? '0 0 8px rgba(74, 144, 226, 0.5)' : 'none',
+                  }}
+                  title={`Mirror on ${axis.toUpperCase()}-axis`}
+                >
+                  {axis.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            {(symmetryAxes.x || symmetryAxes.y || symmetryAxes.z) && (
+              <div style={{
+                fontSize: '10px',
+                color: '#4a90e2',
+                marginTop: '4px',
+                textAlign: 'center'
+              }}>
+                Mirroring on {[
+                  symmetryAxes.x && 'X',
+                  symmetryAxes.y && 'Y',
+                  symmetryAxes.z && 'Z'
+                ].filter(Boolean).join(', ')} axis
+              </div>
+            )}
+          </div>
+
           <div style={{
             borderTop: '1px solid rgba(255,255,255,0.2)',
             paddingTop: '10px',
@@ -95,6 +143,7 @@ export function SculptingControls({
             <div>Shortcuts:</div>
             <div>[ / ] - Brush size</div>
             <div>Shift+[ / Shift+] - Strength</div>
+            <div>X / Y / Z - Toggle symmetry</div>
           </div>
         </>
       )}

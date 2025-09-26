@@ -16,6 +16,7 @@ interface SceneObjectProps {
   currentTool: ToolType;
   brushSize: number;
   brushStrength: number;
+  symmetryAxes: { x: boolean; y: boolean; z: boolean };
   selectedRenderMode?: 'shaded' | 'mesh';
   onSelect: (id: string) => void;
   onPositionChange?: (id: string, position: [number, number, number]) => void;
@@ -34,6 +35,7 @@ export function SceneObject({
   currentTool,
   brushSize,
   brushStrength,
+  symmetryAxes,
   selectedRenderMode = 'shaded',
   onSelect,
   onPositionChange,
@@ -65,6 +67,7 @@ export function SceneObject({
     currentTool,
     brushSize,
     brushStrength,
+    symmetryAxes,
     isSelected,
     onGeometryUpdate: setGeometry,
   });

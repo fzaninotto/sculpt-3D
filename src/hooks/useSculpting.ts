@@ -9,6 +9,7 @@ interface SculptingParams {
   currentTool: ToolType;
   brushSize: number;
   brushStrength: number;
+  symmetryAxes: { x: boolean; y: boolean; z: boolean };
   isSelected: boolean;
   onGeometryUpdate?: (geometry: THREE.BufferGeometry) => void;
 }
@@ -18,6 +19,7 @@ export function useSculpting({
   currentTool,
   brushSize,
   brushStrength,
+  symmetryAxes,
   isSelected,
   onGeometryUpdate,
 }: SculptingParams) {
@@ -161,55 +163,168 @@ export function useSculpting({
       }
     }
 
-    // Apply deformation
-    for (let i = 0; i < positions.count; i++) {
-      const vertex = new THREE.Vector3(
-        positionsArray[i * 3],
-        positionsArray[i * 3 + 1],
-        positionsArray[i * 3 + 2]
-      );
-      vertex.applyMatrix4(mesh.matrixWorld);
+    // Generate mirror points based on active symmetry axes in OBJECT LOCAL SPACE
+    const mirrorPoints: { point: THREE.Vector3, normal: THREE.Vector3 }[] = [{ point, normal: avgNormal }];
 
-      const distance = vertex.distanceTo(point);
+    if (symmetryAxes.x || symmetryAxes.y || symmetryAxes.z) {
+      // Convert point to object's local space
+      const localPoint = point.clone();
+      const invMatrix = mesh.matrixWorld.clone().invert();
+      localPoint.applyMatrix4(invMatrix);
 
-      if (distance < brushSize) {
-        const falloff = 1 - (distance / brushSize);
-        const strength = brushStrength * falloff * falloff * 0.1;
+      // Convert normal to local space (rotation only, no translation)
+      const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+      const invNormalMatrix = normalMatrix.clone().invert();
+      const localNormal = avgNormal.clone().applyMatrix3(invNormalMatrix).normalize();
 
-        let direction: THREE.Vector3;
-        let multiplier = strength;
+      // Generate mirror combinations in local space
+      const mirrorCombinations: { point: THREE.Vector3, normal: THREE.Vector3 }[] = [];
 
-        if (currentTool === 'push') {
-          if (pushToolLastPoint.current) {
-            direction = point.clone().sub(pushToolLastPoint.current);
-            if (direction.length() < 0.001) continue;
-            direction.normalize();
-            const moveDistance = point.distanceTo(pushToolLastPoint.current);
-            multiplier = strength * Math.min(moveDistance * 10, 2.0);
-            if (isShiftPressed.current) multiplier = -multiplier;
+      if (symmetryAxes.x) {
+        mirrorCombinations.push({
+          point: new THREE.Vector3(-localPoint.x, localPoint.y, localPoint.z),
+          normal: new THREE.Vector3(-localNormal.x, localNormal.y, localNormal.z)
+        });
+      }
+      if (symmetryAxes.y) {
+        mirrorCombinations.push({
+          point: new THREE.Vector3(localPoint.x, -localPoint.y, localPoint.z),
+          normal: new THREE.Vector3(localNormal.x, -localNormal.y, localNormal.z)
+        });
+      }
+      if (symmetryAxes.z) {
+        mirrorCombinations.push({
+          point: new THREE.Vector3(localPoint.x, localPoint.y, -localPoint.z),
+          normal: new THREE.Vector3(localNormal.x, localNormal.y, -localNormal.z)
+        });
+      }
+      if (symmetryAxes.x && symmetryAxes.y) {
+        mirrorCombinations.push({
+          point: new THREE.Vector3(-localPoint.x, -localPoint.y, localPoint.z),
+          normal: new THREE.Vector3(-localNormal.x, -localNormal.y, localNormal.z)
+        });
+      }
+      if (symmetryAxes.x && symmetryAxes.z) {
+        mirrorCombinations.push({
+          point: new THREE.Vector3(-localPoint.x, localPoint.y, -localPoint.z),
+          normal: new THREE.Vector3(-localNormal.x, localNormal.y, -localNormal.z)
+        });
+      }
+      if (symmetryAxes.y && symmetryAxes.z) {
+        mirrorCombinations.push({
+          point: new THREE.Vector3(localPoint.x, -localPoint.y, -localPoint.z),
+          normal: new THREE.Vector3(localNormal.x, -localNormal.y, -localNormal.z)
+        });
+      }
+      if (symmetryAxes.x && symmetryAxes.y && symmetryAxes.z) {
+        mirrorCombinations.push({
+          point: new THREE.Vector3(-localPoint.x, -localPoint.y, -localPoint.z),
+          normal: new THREE.Vector3(-localNormal.x, -localNormal.y, -localNormal.z)
+        });
+      }
+
+      // Convert back to world space
+      const worldNormalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+      for (const mirror of mirrorCombinations) {
+        mirror.point.applyMatrix4(mesh.matrixWorld);
+        mirror.normal.applyMatrix3(worldNormalMatrix).normalize();
+        mirrorPoints.push(mirror);
+      }
+    }
+
+    // Apply deformation for each mirror point
+    for (const mirrorData of mirrorPoints) {
+      const mirrorPoint = mirrorData.point;
+      const mirrorNormal = mirrorData.normal;
+
+      for (let i = 0; i < positions.count; i++) {
+        const vertex = new THREE.Vector3(
+          positionsArray[i * 3],
+          positionsArray[i * 3 + 1],
+          positionsArray[i * 3 + 2]
+        );
+        vertex.applyMatrix4(mesh.matrixWorld);
+
+        const distance = vertex.distanceTo(mirrorPoint);
+
+        if (distance < brushSize) {
+          const falloff = 1 - (distance / brushSize);
+          const strength = brushStrength * falloff * falloff * 0.1;
+
+          let direction: THREE.Vector3;
+          let multiplier = strength;
+
+          if (currentTool === 'push') {
+            if (pushToolLastPoint.current) {
+              // For push tool, calculate direction from last point
+              if (mirrorData === mirrorPoints[0]) {
+                // Original point - use actual movement
+                direction = mirrorPoint.clone().sub(pushToolLastPoint.current);
+              } else {
+                // Mirrored point - mirror the movement direction in local space
+                const originalMovement = point.clone().sub(pushToolLastPoint.current);
+                const invMatrix = mesh.matrixWorld.clone().invert();
+                const localMovement = originalMovement.clone().applyMatrix4(invMatrix);
+
+                // Mirror the movement based on active axes
+                if (symmetryAxes.x && mirrorData.point !== point) {
+                  const localOriginal = point.clone().applyMatrix4(invMatrix);
+                  const localMirror = mirrorPoint.clone().applyMatrix4(invMatrix);
+                  if (Math.sign(localOriginal.x) !== Math.sign(localMirror.x)) {
+                    localMovement.x = -localMovement.x;
+                  }
+                }
+                if (symmetryAxes.y && mirrorData.point !== point) {
+                  const localOriginal = point.clone().applyMatrix4(invMatrix);
+                  const localMirror = mirrorPoint.clone().applyMatrix4(invMatrix);
+                  if (Math.sign(localOriginal.y) !== Math.sign(localMirror.y)) {
+                    localMovement.y = -localMovement.y;
+                  }
+                }
+                if (symmetryAxes.z && mirrorData.point !== point) {
+                  const localOriginal = point.clone().applyMatrix4(invMatrix);
+                  const localMirror = mirrorPoint.clone().applyMatrix4(invMatrix);
+                  if (Math.sign(localOriginal.z) !== Math.sign(localMirror.z)) {
+                    localMovement.z = -localMovement.z;
+                  }
+                }
+
+                // Convert back to world space
+                localMovement.applyMatrix4(mesh.matrixWorld);
+                direction = localMovement;
+              }
+
+              if (direction.length() < 0.001) continue;
+              direction.normalize();
+
+              const moveDistance = point.distanceTo(pushToolLastPoint.current);
+              multiplier = strength * Math.min(moveDistance * 10, 2.0);
+              if (isShiftPressed.current) multiplier = -multiplier;
+            } else {
+              continue;
+            }
           } else {
-            continue;
+            // For add/subtract, use the mirrored normal
+            direction = mirrorNormal.clone();
+            if (currentTool === 'subtract') {
+              multiplier = -strength;
+            }
+            if (isShiftPressed.current) {
+              multiplier = -multiplier;
+            }
           }
-        } else {
-          direction = avgNormal.clone();
-          if (currentTool === 'subtract') {
-            multiplier = -strength;
-          }
-          if (isShiftPressed.current) {
-            multiplier = -multiplier;
-          }
+
+          vertex.add(direction.multiplyScalar(multiplier));
+
+          const invMatrix = mesh.matrixWorld.clone().invert();
+          vertex.applyMatrix4(invMatrix);
+
+          positionsArray[i * 3] = vertex.x;
+          positionsArray[i * 3 + 1] = vertex.y;
+          positionsArray[i * 3 + 2] = vertex.z;
+
+          modified = true;
         }
-
-        vertex.add(direction.multiplyScalar(multiplier));
-
-        const invMatrix = mesh.matrixWorld.clone().invert();
-        vertex.applyMatrix4(invMatrix);
-
-        positionsArray[i * 3] = vertex.x;
-        positionsArray[i * 3 + 1] = vertex.y;
-        positionsArray[i * 3 + 2] = vertex.z;
-
-        modified = true;
       }
     }
 
@@ -226,7 +341,7 @@ export function useSculpting({
 
     isProcessing.current = false;
     return modified;
-  }, [isSelected, isSculptMode, brushSize, brushStrength, raycaster, camera, currentTool, meshRef, onGeometryUpdate]);
+  }, [isSelected, isSculptMode, brushSize, brushStrength, symmetryAxes, raycaster, camera, currentTool, meshRef, onGeometryUpdate]);
 
   return {
     isSculptMode,

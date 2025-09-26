@@ -27,6 +27,7 @@ export function ModelingCanvas() {
   // Sculpting parameters
   const [brushSize, setBrushSize] = useState(0.5);
   const [brushStrength, setBrushStrength] = useState(0.5);
+  const [symmetryAxes, setSymmetryAxes] = useState({ x: false, y: false, z: false });
 
   // Scene state
   const [objects, setObjects] = useState<SceneObjectData[]>([]);
@@ -46,6 +47,14 @@ export function ModelingCanvas() {
         setBrushStrength(prev => Math.max(0.1, prev - 0.2));
       } else if (event.key === '}' || (event.shiftKey && event.key === ']')) {
         setBrushStrength(prev => Math.min(1.0, prev + 0.2));
+      }
+      // Symmetry shortcuts
+      else if (event.key === 'x' && !event.ctrlKey && !event.metaKey) {
+        setSymmetryAxes(prev => ({ ...prev, x: !prev.x }));
+      } else if (event.key === 'y' && !event.ctrlKey && !event.metaKey) {
+        setSymmetryAxes(prev => ({ ...prev, y: !prev.y }));
+      } else if (event.key === 'z' && !event.ctrlKey && !event.metaKey) {
+        setSymmetryAxes(prev => ({ ...prev, z: !prev.z }));
       }
       // Tool shortcuts
       else if (event.key === 's' && !event.ctrlKey && !event.metaKey) {
@@ -123,6 +132,7 @@ export function ModelingCanvas() {
           selectedPrimitive={selectedPrimitive}
           brushSize={brushSize}
           brushStrength={brushStrength}
+          symmetryAxes={symmetryAxes}
           selectedRenderMode={selectedRenderMode}
           onSelectObject={handleSelectObject}
           onPlaceObject={handlePlaceObject}
@@ -181,8 +191,12 @@ export function ModelingCanvas() {
         brushSize={brushSize}
         brushStrength={brushStrength}
         selectedObjectId={selectedObjectId}
+        symmetryAxes={symmetryAxes}
         onBrushSizeChange={setBrushSize}
         onBrushStrengthChange={setBrushStrength}
+        onSymmetryChange={(axis, enabled) => {
+          setSymmetryAxes(prev => ({ ...prev, [axis]: enabled }));
+        }}
       />
 
       <StatusOverlay

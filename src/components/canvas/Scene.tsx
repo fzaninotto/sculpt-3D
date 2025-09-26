@@ -4,6 +4,7 @@ import { Grid } from '@react-three/drei';
 import { SceneObject } from '../objects/SceneObject';
 import { BrushPreview } from '../tools/BrushPreview';
 import { PlacementHandler } from '../objects/PlacementHandler';
+import { SymmetryPlanes } from '../tools/SymmetryPlanes';
 import type { PrimitiveType, ToolType } from '../../types';
 
 interface SceneObjectData {
@@ -21,6 +22,7 @@ interface SceneProps {
   selectedPrimitive: PrimitiveType;
   brushSize: number;
   brushStrength: number;
+  symmetryAxes: { x: boolean; y: boolean; z: boolean };
   selectedRenderMode: 'shaded' | 'mesh';
   onSelectObject: (id: string | null) => void;
   onPlaceObject: (type: PrimitiveType, position: [number, number, number], scale: number, rotation: [number, number, number]) => void;
@@ -40,6 +42,7 @@ export function Scene({
   selectedPrimitive,
   brushSize,
   brushStrength,
+  symmetryAxes,
   selectedRenderMode,
   onSelectObject,
   onPlaceObject,
@@ -71,6 +74,18 @@ export function Scene({
 
       <AxesHelper />
 
+      {(() => {
+        const selectedObject = objects.find(obj => obj.id === selectedObjectId);
+        return (
+          <SymmetryPlanes
+            symmetryAxes={symmetryAxes}
+            selectedObjectPosition={selectedObject?.position}
+            selectedObjectRotation={selectedObject?.rotation}
+            selectedObjectScale={selectedObject?.scale}
+          />
+        );
+      })()}
+
       {objects.map((obj) => (
         <SceneObject
           key={obj.id}
@@ -83,6 +98,7 @@ export function Scene({
           currentTool={currentTool}
           brushSize={brushSize}
           brushStrength={brushStrength}
+          symmetryAxes={symmetryAxes}
           selectedRenderMode={obj.id === selectedObjectId ? selectedRenderMode : 'shaded'}
           onSelect={onSelectObject}
           onPositionChange={onPositionChange}
