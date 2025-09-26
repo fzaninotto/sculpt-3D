@@ -12,6 +12,7 @@ interface SceneObjectProps {
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
+  initialGeometry?: THREE.BufferGeometry;
   isSelected: boolean;
   currentTool: ToolType;
   brushSize: number;
@@ -23,6 +24,8 @@ interface SceneObjectProps {
   onScaleChange?: (id: string, scale: [number, number, number]) => void;
   meshRef?: React.MutableRefObject<THREE.Mesh | null>;
   onVertexCountUpdate?: (objectId: string, count: number) => void;
+  onGeometryUpdate?: (objectId: string, geometry: THREE.BufferGeometry) => void;
+  onRequestStateSave?: () => void;
 }
 
 export function SceneObject({
@@ -31,6 +34,7 @@ export function SceneObject({
   position,
   rotation,
   scale,
+  initialGeometry,
   isSelected,
   currentTool,
   brushSize,
@@ -42,6 +46,8 @@ export function SceneObject({
   onScaleChange,
   meshRef: externalMeshRef,
   onVertexCountUpdate,
+  onGeometryUpdate,
+  onRequestStateSave,
 }: SceneObjectProps) {
   const internalMeshRef = useRef<THREE.Mesh>(null);
   const meshRef = externalMeshRef || internalMeshRef;
@@ -50,16 +56,28 @@ export function SceneObject({
 
   // Initialize geometry
   const [geometry, setGeometry] = useState<THREE.BufferGeometry>(() =>
-    PrimitiveFactory.createGeometry(type, scale)
+    initialGeometry || PrimitiveFactory.createGeometry(type, scale)
   );
 
-  // Report vertex count when geometry changes
+  const hasModifiedDuringStroke = useRef(false);
+
+  // Update geometry when initialGeometry prop changes (e.g., during undo/redo)
+  useEffect(() => {
+    if (initialGeometry) {
+      setGeometry(initialGeometry.clone());
+    }
+  }, [initialGeometry]);
+
+  // Report vertex count and geometry changes
   useEffect(() => {
     if (onVertexCountUpdate) {
       const vertexCount = geometry.getAttribute('position')?.count || 0;
       onVertexCountUpdate(id, vertexCount);
     }
-  }, [geometry, id, onVertexCountUpdate]);
+    if (onGeometryUpdate) {
+      onGeometryUpdate(id, geometry);
+    }
+  }, [geometry, id, onVertexCountUpdate, onGeometryUpdate]);
 
   // Sculpting logic
   const { isSculptMode, sculpt, resetPushTool, updateMousePosition } = useSculpting({
@@ -69,7 +87,9 @@ export function SceneObject({
     brushStrength,
     symmetryAxes,
     isSelected,
-    onGeometryUpdate: setGeometry,
+    onGeometryUpdate: (newGeometry) => {
+      setGeometry(newGeometry);
+    },
   });
 
   // Object manipulation (move/scale)
@@ -95,6 +115,9 @@ export function SceneObject({
       if (event.button === 0 && isSculptMode && isSelected) {
         event.preventDefault();
         event.stopPropagation();
+
+        // Reset modification tracking for this stroke
+        hasModifiedDuringStroke.current = false;
         setIsMouseDown(true);
 
         const rect = canvas.getBoundingClientRect();
@@ -105,11 +128,23 @@ export function SceneObject({
     };
 
     const handleMouseUp = () => {
+      // Check if we were sculpting BEFORE clearing the flag
+      const wasSculpting = isMouseDown && isSculptMode && isSelected;
+      const didModify = hasModifiedDuringStroke.current;
+
+      // Clear state flags
       setIsMouseDown(false);
+      hasModifiedDuringStroke.current = false;
+
       if (isDragging) {
         endDrag();
       }
       resetPushTool();
+
+      // Request state save AFTER completing a stroke that made modifications
+      if (wasSculpting && didModify && onRequestStateSave) {
+        onRequestStateSave();
+      }
     };
 
     const handleMouseMove = (event: MouseEvent) => {
@@ -140,12 +175,15 @@ export function SceneObject({
       canvas.removeEventListener('mouseleave', handleMouseUp);
       canvas.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [currentTool, isSculptMode, isSelected, isDragging, gl, endDrag, resetPushTool, updateMousePosition, updateDrag]);
+  }, [currentTool, isSculptMode, isSelected, isDragging, gl, endDrag, resetPushTool, updateMousePosition, updateDrag, id, onRequestStateSave, isMouseDown]);
 
   // Sculpt on every frame while mouse is down
   useFrame(() => {
     if (isMouseDown && isSculptMode && isSelected) {
-      sculpt();
+      const didModify = sculpt();
+      if (didModify) {
+        hasModifiedDuringStroke.current = true;
+      }
     }
   });
 

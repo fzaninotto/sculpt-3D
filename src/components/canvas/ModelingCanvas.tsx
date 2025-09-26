@@ -7,7 +7,9 @@ import { Toolbar } from '../tools/Toolbar';
 import { ObjectSidebar } from '../ui/ObjectSidebar';
 import { SculptingControls } from '../ui/SculptingControls';
 import { StatusOverlay } from '../ui/StatusOverlay';
+import { UndoRedoControls } from '../ui/UndoRedoControls';
 import { getOrbitDisablingTools } from '../../services/tools/toolDefinitions';
+import { useSceneUndo } from '../../hooks/useSceneUndo';
 import type { PrimitiveType, ToolType } from '../../types';
 
 interface SceneObjectData {
@@ -34,6 +36,24 @@ export function ModelingCanvas() {
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedRenderMode, setSelectedRenderMode] = useState<'shaded' | 'mesh'>('shaded');
   const [objectVertexCounts, setObjectVertexCounts] = useState<Record<string, number>>({});
+  const [objectGeometries, setObjectGeometries] = useState<Record<string, THREE.BufferGeometry>>({});
+
+  // Undo/Redo system
+  const {
+    saveCurrentState,
+    requestStateSave,
+    handleUndo,
+    handleRedo,
+    canUndo,
+    canRedo,
+  } = useSceneUndo({
+    objects,
+    objectGeometries,
+    selectedObjectId,
+    setObjects,
+    setObjectGeometries,
+    setSelectedObjectId,
+  });
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -82,7 +102,10 @@ export function ModelingCanvas() {
     setObjects(prev => [...prev, newObject]);
     setSelectedObjectId(newObject.id);
     setCurrentTool('add');
-  }, []);
+
+    // Mark that we need to save state after geometry is initialized
+    requestStateSave();
+  }, [requestStateSave]);
 
   const handleSelectObject = useCallback((id: string | null) => {
     if (currentTool === 'select') {
@@ -93,11 +116,21 @@ export function ModelingCanvas() {
   }, [currentTool]);
 
   const handleDeleteObject = useCallback((id: string) => {
+    // Save state before deletion
+    saveCurrentState();
+
     setObjects(prev => prev.filter(obj => obj.id !== id));
     if (selectedObjectId === id) {
       setSelectedObjectId(null);
     }
-  }, [selectedObjectId]);
+
+    // Clean up geometry
+    setObjectGeometries(prev => {
+      const newGeometries = { ...prev };
+      delete newGeometries[id];
+      return newGeometries;
+    });
+  }, [selectedObjectId, saveCurrentState]);
 
   const handleObjectPositionChange = useCallback((id: string, position: [number, number, number]) => {
     setObjects(prev => prev.map(obj => obj.id === id ? { ...obj, position } : obj));
@@ -127,6 +160,7 @@ export function ModelingCanvas() {
       >
         <Scene
           objects={objects}
+          objectGeometries={objectGeometries}
           selectedObjectId={selectedObjectId}
           currentTool={currentTool}
           selectedPrimitive={selectedPrimitive}
@@ -141,6 +175,10 @@ export function ModelingCanvas() {
           onVertexCountUpdate={(objectId, count) => {
             setObjectVertexCounts(prev => ({ ...prev, [objectId]: count }));
           }}
+          onGeometryUpdate={(objectId, geometry) => {
+            setObjectGeometries(prev => ({ ...prev, [objectId]: geometry }));
+          }}
+          onRequestStateSave={saveCurrentState}
         />
 
         <OrbitControls
@@ -165,6 +203,13 @@ export function ModelingCanvas() {
       </Canvas>
 
       {/* UI Components */}
+      <UndoRedoControls
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+      />
+
       <Toolbar
         currentTool={currentTool}
         selectedPrimitive={selectedPrimitive}

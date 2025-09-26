@@ -17,6 +17,7 @@ interface SceneObjectData {
 
 interface SceneProps {
   objects: SceneObjectData[];
+  objectGeometries: Record<string, THREE.BufferGeometry>;
   selectedObjectId: string | null;
   currentTool: ToolType;
   selectedPrimitive: PrimitiveType;
@@ -29,6 +30,8 @@ interface SceneProps {
   onPositionChange: (id: string, position: [number, number, number]) => void;
   onScaleChange: (id: string, scale: [number, number, number]) => void;
   onVertexCountUpdate: (objectId: string, count: number) => void;
+  onGeometryUpdate: (objectId: string, geometry: THREE.BufferGeometry) => void;
+  onRequestStateSave: () => void;
 }
 
 function AxesHelper() {
@@ -37,6 +40,7 @@ function AxesHelper() {
 
 export function Scene({
   objects,
+  objectGeometries,
   selectedObjectId,
   currentTool,
   selectedPrimitive,
@@ -49,6 +53,8 @@ export function Scene({
   onPositionChange,
   onScaleChange,
   onVertexCountUpdate,
+  onGeometryUpdate,
+  onRequestStateSave,
 }: SceneProps) {
   const selectedMeshRef = useRef<THREE.Mesh | null>(null);
   const isSculptingTool = ['add', 'subtract', 'push'].includes(currentTool);
@@ -94,6 +100,7 @@ export function Scene({
           position={obj.position}
           rotation={obj.rotation}
           scale={obj.scale}
+          initialGeometry={objectGeometries[obj.id]}
           isSelected={obj.id === selectedObjectId}
           currentTool={currentTool}
           brushSize={brushSize}
@@ -105,6 +112,8 @@ export function Scene({
           onScaleChange={onScaleChange}
           meshRef={obj.id === selectedObjectId ? selectedMeshRef : undefined}
           onVertexCountUpdate={onVertexCountUpdate}
+          onGeometryUpdate={onGeometryUpdate}
+          onRequestStateSave={onRequestStateSave}
         />
       ))}
 
