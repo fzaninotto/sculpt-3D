@@ -1,0 +1,194 @@
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
+import * as THREE from 'three';
+import { Scene } from './Scene';
+import { Toolbar } from '../tools/Toolbar';
+import { ObjectSidebar } from '../ui/ObjectSidebar';
+import { SculptingControls } from '../ui/SculptingControls';
+import { StatusOverlay } from '../ui/StatusOverlay';
+import { getOrbitDisablingTools } from '../../services/tools/toolDefinitions';
+import type { PrimitiveType, ToolType } from '../../types';
+
+interface SceneObjectData {
+  id: string;
+  type: PrimitiveType;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: [number, number, number];
+}
+
+export function ModelingCanvas() {
+  // Controls and tools
+  const controlsRef = useRef<any>(null);
+  const [currentTool, setCurrentTool] = useState<ToolType>('select');
+  const [selectedPrimitive, setSelectedPrimitive] = useState<PrimitiveType>('sphere');
+
+  // Sculpting parameters
+  const [brushSize, setBrushSize] = useState(0.5);
+  const [brushStrength, setBrushStrength] = useState(0.5);
+
+  // Scene state
+  const [objects, setObjects] = useState<SceneObjectData[]>([]);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedRenderMode, setSelectedRenderMode] = useState<'shaded' | 'mesh'>('shaded');
+  const [objectVertexCounts, setObjectVertexCounts] = useState<Record<string, number>>({});
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Brush controls
+      if (event.key === '[') {
+        setBrushSize(prev => Math.max(0.1, prev - 0.1));
+      } else if (event.key === ']') {
+        setBrushSize(prev => Math.min(2, prev + 0.1));
+      } else if (event.key === '{' || (event.shiftKey && event.key === '[')) {
+        setBrushStrength(prev => Math.max(0.1, prev - 0.2));
+      } else if (event.key === '}' || (event.shiftKey && event.key === ']')) {
+        setBrushStrength(prev => Math.min(1.0, prev + 0.2));
+      }
+      // Tool shortcuts
+      else if (event.key === 's' && !event.ctrlKey && !event.metaKey) {
+        setCurrentTool('select');
+      } else if (event.key === 'a' && !event.ctrlKey && !event.metaKey) {
+        setCurrentTool('add-primitive');
+      } else if (event.key === 'b' && !event.ctrlKey && !event.metaKey) {
+        setCurrentTool('add');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Object management callbacks
+  const handlePlaceObject = useCallback((type: PrimitiveType, position: [number, number, number], scale: number, rotation: [number, number, number]) => {
+    const newObject: SceneObjectData = {
+      id: `object_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      type,
+      position,
+      rotation,
+      scale: [scale, scale, scale],
+    };
+    setObjects(prev => [...prev, newObject]);
+    setSelectedObjectId(newObject.id);
+    setCurrentTool('add');
+  }, []);
+
+  const handleSelectObject = useCallback((id: string | null) => {
+    if (currentTool === 'select') {
+      setSelectedObjectId(id);
+    } else if (id) {
+      setSelectedObjectId(id);
+    }
+  }, [currentTool]);
+
+  const handleDeleteObject = useCallback((id: string) => {
+    setObjects(prev => prev.filter(obj => obj.id !== id));
+    if (selectedObjectId === id) {
+      setSelectedObjectId(null);
+    }
+  }, [selectedObjectId]);
+
+  const handleObjectPositionChange = useCallback((id: string, position: [number, number, number]) => {
+    setObjects(prev => prev.map(obj => obj.id === id ? { ...obj, position } : obj));
+  }, []);
+
+  const handleObjectRotationChange = useCallback((id: string, rotation: [number, number, number]) => {
+    setObjects(prev => prev.map(obj => obj.id === id ? { ...obj, rotation } : obj));
+  }, []);
+
+  const handleObjectScaleChange = useCallback((id: string, scale: [number, number, number]) => {
+    setObjects(prev => prev.map(obj => obj.id === id ? { ...obj, scale } : obj));
+  }, []);
+
+  const handleCanvasClick = useCallback((event: React.MouseEvent) => {
+    if (currentTool === 'select' && event.target === event.currentTarget) {
+      setSelectedObjectId(null);
+    }
+  }, [currentTool]);
+
+  const orbitDisablingTools = getOrbitDisablingTools();
+
+  return (
+    <div style={{ width: '100%', height: '100vh', position: 'relative' }}>
+      <Canvas
+        camera={{ position: [10, 10, 10], fov: 50 }}
+        onClick={handleCanvasClick}
+      >
+        <Scene
+          objects={objects}
+          selectedObjectId={selectedObjectId}
+          currentTool={currentTool}
+          selectedPrimitive={selectedPrimitive}
+          brushSize={brushSize}
+          brushStrength={brushStrength}
+          selectedRenderMode={selectedRenderMode}
+          onSelectObject={handleSelectObject}
+          onPlaceObject={handlePlaceObject}
+          onPositionChange={handleObjectPositionChange}
+          onScaleChange={handleObjectScaleChange}
+          onVertexCountUpdate={(objectId, count) => {
+            setObjectVertexCounts(prev => ({ ...prev, [objectId]: count }));
+          }}
+        />
+
+        <OrbitControls
+          ref={controlsRef}
+          enablePan={true}
+          enableRotate={true}
+          enableZoom={true}
+          mouseButtons={{
+            LEFT: orbitDisablingTools.includes(currentTool) ? undefined : THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.ROTATE,
+            RIGHT: THREE.MOUSE.PAN
+          }}
+          touches={{
+            ONE: THREE.TOUCH.ROTATE,
+            TWO: THREE.TOUCH.DOLLY_PAN
+          }}
+        />
+
+        <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
+          <GizmoViewport axisColors={['red', 'green', 'blue']} labelColor="black" />
+        </GizmoHelper>
+      </Canvas>
+
+      {/* UI Components */}
+      <Toolbar
+        currentTool={currentTool}
+        selectedPrimitive={selectedPrimitive}
+        selectedObjectId={selectedObjectId}
+        onToolChange={setCurrentTool}
+        onPrimitiveSelect={setSelectedPrimitive}
+      />
+
+      <ObjectSidebar
+        selectedObjectId={selectedObjectId}
+        objects={objects}
+        selectedRenderMode={selectedRenderMode}
+        objectVertexCounts={objectVertexCounts}
+        onDeselectObject={() => setSelectedObjectId(null)}
+        onDeleteObject={handleDeleteObject}
+        onRenderModeChange={setSelectedRenderMode}
+        onObjectPositionChange={handleObjectPositionChange}
+        onObjectRotationChange={handleObjectRotationChange}
+        onObjectScaleChange={handleObjectScaleChange}
+      />
+
+      <SculptingControls
+        currentTool={currentTool}
+        brushSize={brushSize}
+        brushStrength={brushStrength}
+        selectedObjectId={selectedObjectId}
+        onBrushSizeChange={setBrushSize}
+        onBrushStrengthChange={setBrushStrength}
+      />
+
+      <StatusOverlay
+        currentTool={currentTool}
+        selectedPrimitive={selectedPrimitive}
+      />
+    </div>
+  );
+}

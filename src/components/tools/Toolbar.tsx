@@ -1,4 +1,5 @@
-import type { PrimitiveType, ToolType } from '../types';
+import type { PrimitiveType, ToolType } from '../../types';
+import { TOOL_DEFINITIONS, PRIMITIVE_DEFINITIONS } from '../../services/tools/toolDefinitions';
 
 interface ToolbarProps {
   currentTool: ToolType;
@@ -15,23 +16,7 @@ export function Toolbar({
   onToolChange,
   onPrimitiveSelect,
 }: ToolbarProps) {
-  const tools = [
-    { id: 'select', icon: '↖', label: 'Select' },
-    { id: 'add-primitive', icon: '◉', label: 'Add Shape' },
-    { id: 'move', icon: '✥', label: 'Move' },
-    { id: 'scale', icon: '⤢', label: 'Scale' },
-    { id: 'add', icon: '+', label: 'Add' },
-    { id: 'subtract', icon: '−', label: 'Subtract' },
-    { id: 'push', icon: '→', label: 'Push' },
-  ] as const;
-
-  const primitives = [
-    { id: 'sphere', icon: '○', label: 'Sphere' },
-    { id: 'cube', icon: '□', label: 'Cube' },
-    { id: 'cylinder', icon: '▭', label: 'Cylinder' },
-    { id: 'cone', icon: '△', label: 'Cone' },
-    { id: 'torus', icon: '◯', label: 'Torus' },
-  ] as const;
+  const hasSelectedObject = selectedObjectId !== null;
 
   return (
     <div style={{
@@ -53,18 +38,18 @@ export function Toolbar({
         borderRadius: '8px',
         boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
       }}>
-        {tools.map((tool) => {
-          const objectDependentTools = ['move', 'scale', 'add', 'subtract', 'push'];
-          const isDisabled = objectDependentTools.includes(tool.id) && selectedObjectId === null;
+        {TOOL_DEFINITIONS.map((tool) => {
+          const isDisabled = tool.requiresObject && !hasSelectedObject;
           return (
             <button
               key={tool.id}
-              onClick={() => !isDisabled && onToolChange(tool.id as ToolType)}
+              onClick={() => !isDisabled && onToolChange(tool.id)}
               disabled={isDisabled}
               style={{
                 width: '50px',
                 height: '50px',
-                backgroundColor: currentTool === tool.id ? '#4a90e2' : isDisabled ? '#1a1a1a' : '#2c2c2c',
+                backgroundColor: currentTool === tool.id ? '#4a90e2' :
+                                isDisabled ? '#1a1a1a' : '#2c2c2c',
                 border: 'none',
                 borderRadius: '6px',
                 color: isDisabled ? '#666' : 'white',
@@ -86,7 +71,7 @@ export function Toolbar({
         })}
       </div>
 
-      {/* Primitive Selection (visible when add-primitive tool is selected) */}
+      {/* Primitive Selection */}
       {currentTool === 'add-primitive' && (
         <div style={{
           display: 'flex',
@@ -96,12 +81,10 @@ export function Toolbar({
           borderRadius: '8px',
           boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
         }}>
-          {primitives.map((primitive) => (
+          {PRIMITIVE_DEFINITIONS.map((primitive) => (
             <button
               key={primitive.id}
-              onClick={() => {
-                onPrimitiveSelect(primitive.id as PrimitiveType);
-              }}
+              onClick={() => onPrimitiveSelect(primitive.id)}
               style={{
                 width: '45px',
                 height: '45px',
@@ -125,7 +108,6 @@ export function Toolbar({
           ))}
         </div>
       )}
-
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import type { PrimitiveType } from '../types';
+import type { PrimitiveType } from '../../types';
 
 interface PlacementPreviewProps {
   type: PrimitiveType;

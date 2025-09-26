@@ -1,7 +1,7 @@
 import { useRef, useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { ToolType } from '../types';
+import type { ToolType } from '../../types';
 
 interface BrushPreviewProps {
   brushSize: number;

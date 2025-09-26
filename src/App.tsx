@@ -1,4 +1,4 @@
-import { ModelingCanvas } from './components/ModelingCanvas'
+import { ModelingCanvas } from './components/canvas/ModelingCanvas'
 
 function App() {
   return <ModelingCanvas />
