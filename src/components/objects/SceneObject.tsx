@@ -72,6 +72,21 @@ export function SceneObject({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount, don't sync from props after that
 
+  // Update geometry when initialGeometry prop changes (for undo/redo)
+  useEffect(() => {
+    if (initialGeometry && initialGeometry !== geometryRef.current) {
+      geometryRef.current = initialGeometry;
+      if (meshRef.current) {
+        meshRef.current.geometry = initialGeometry;
+        if (wireframeBackgroundMeshRef.current) {
+          wireframeBackgroundMeshRef.current.geometry = initialGeometry;
+        }
+      }
+      geometryVersionRef.current++;
+      setGeometryUpdateCounter(c => c + 1);
+    }
+  }, [initialGeometry, meshRef]);
+
   // Report vertex count and geometry changes
   useEffect(() => {
     if (onVertexCountUpdate) {
