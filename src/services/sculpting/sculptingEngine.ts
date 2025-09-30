@@ -210,13 +210,13 @@ function applyDeformation(
 
       if (distance < brushSize) {
         const falloff = 1 - (distance / brushSize);
-        const strength = brushStrength * falloff * falloff * 0.2;
+        const strength = brushStrength * falloff * falloff * 0.02;
 
         let multiplier = strength;
 
         if (tool === 'push') {
           const moveDistance = previousPoint ? clickPoint.distanceTo(previousPoint) : 0;
-          multiplier = strength * Math.min(moveDistance * 25, 5.0);
+          multiplier = strength * Math.min(moveDistance * 250, 50.0);
           if (invert) multiplier = -multiplier;
         } else {
           if (tool === 'subtract') {
