@@ -51,33 +51,37 @@ export function SceneObject({
 }: SceneObjectProps) {
   const internalMeshRef = useRef<THREE.Mesh>(null);
   const meshRef = externalMeshRef || internalMeshRef;
+  const wireframeBackgroundMeshRef = useRef<THREE.Mesh>(null);
   const { gl } = useThree();
   const [isMouseDown, setIsMouseDown] = useState(false);
 
-  // Initialize geometry
-  const [geometry, setGeometry] = useState<THREE.BufferGeometry>(() =>
+  // Initialize geometry using ref for performance
+  const geometryRef = useRef<THREE.BufferGeometry>(
     initialGeometry || PrimitiveFactory.createGeometry(type, scale)
   );
+  const geometryVersionRef = useRef(0);
+  const [geometryUpdateCounter, setGeometryUpdateCounter] = useState(0);
 
   const hasModifiedDuringStroke = useRef(false);
 
-  // Update geometry when initialGeometry prop changes (e.g., during undo/redo)
+  // Set initial geometry on mount ONLY
   useEffect(() => {
-    if (initialGeometry) {
-      setGeometry(initialGeometry.clone());
+    if (meshRef.current && geometryRef.current) {
+      meshRef.current.geometry = geometryRef.current;
     }
-  }, [initialGeometry]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount, don't sync from props after that
 
   // Report vertex count and geometry changes
   useEffect(() => {
     if (onVertexCountUpdate) {
-      const vertexCount = geometry.getAttribute('position')?.count || 0;
+      const vertexCount = geometryRef.current.getAttribute('position')?.count || 0;
       onVertexCountUpdate(id, vertexCount);
     }
     if (onGeometryUpdate) {
-      onGeometryUpdate(id, geometry);
+      onGeometryUpdate(id, geometryRef.current);
     }
-  }, [geometry, id, onVertexCountUpdate, onGeometryUpdate]);
+  }, [geometryUpdateCounter, id, onVertexCountUpdate, onGeometryUpdate]);
 
   // Sculpting logic
   const { isSculptMode, sculpt, resetPushTool, updateMousePosition } = useSculpting({
@@ -87,8 +91,31 @@ export function SceneObject({
     brushStrength,
     symmetryAxes,
     isSelected,
-    onGeometryUpdate: (newGeometry) => {
-      setGeometry(newGeometry);
+    geometryVersionRef,
+    onGeometryUpdate: (newGeometry, startingVersion) => {
+      // Check for race condition before updating - use current ref value
+      if (geometryVersionRef.current !== startingVersion) {
+        // Race detected: discard this update
+        return false;
+      }
+
+      // Update ref synchronously
+      geometryRef.current = newGeometry;
+
+      // CRITICAL: Update mesh.geometry IMMEDIATELY
+      // Don't wait for React to re-render, as next frame will start before that happens
+      if (meshRef.current) {
+        meshRef.current.geometry = newGeometry;
+        if (wireframeBackgroundMeshRef.current) {
+          wireframeBackgroundMeshRef.current.geometry = newGeometry;
+        }
+      }
+
+      // Increment version to trigger re-render for effects (vertex count updates, etc)
+      geometryVersionRef.current++;
+      setGeometryUpdateCounter(c => c + 1);
+
+      return true;
     },
   });
 
@@ -206,6 +233,18 @@ export function SceneObject({
   const showShaded = !isSelected || (isSelected && selectedRenderMode === 'shaded');
   const showWireframe = isSelected && selectedRenderMode === 'mesh';
 
+  // Ensure meshes get geometry when switching modes
+  useEffect(() => {
+    if (geometryRef.current) {
+      if (meshRef.current) {
+        meshRef.current.geometry = geometryRef.current;
+      }
+      if (showWireframe && wireframeBackgroundMeshRef.current) {
+        wireframeBackgroundMeshRef.current.geometry = geometryRef.current;
+      }
+    }
+  }, [showWireframe, showShaded, meshRef]);
+
   return (
     <>
       {showShaded && (
@@ -214,7 +253,6 @@ export function SceneObject({
           position={position}
           rotation={rotation}
           scale={scale}
-          geometry={geometry}
           onPointerDown={handlePointerDown}
         >
           <meshStandardMaterial
@@ -228,10 +266,10 @@ export function SceneObject({
       {showWireframe && (
         <>
           <mesh
+            ref={wireframeBackgroundMeshRef}
             position={position}
             rotation={rotation}
             scale={scale}
-            geometry={geometry}
             renderOrder={1}
           >
             <meshBasicMaterial
@@ -245,7 +283,6 @@ export function SceneObject({
             position={position}
             rotation={rotation}
             scale={scale}
-            geometry={geometry}
             onPointerDown={handlePointerDown}
             renderOrder={2}
           >

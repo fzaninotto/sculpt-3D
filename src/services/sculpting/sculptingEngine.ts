@@ -247,8 +247,11 @@ function applyDeformation(
  * Set cloneGeometry=true for immutable behavior (useful in tests).
  */
 export function applySculptingStroke(params: SculptingStrokeParams): SculptingStrokeResult {
+  // For tests, clone the geometry for isolation
+  // For UI, we'll modify in-place for performance, but track if we create new geometry
   let geometry = params.cloneGeometry ? params.geometry.clone() : params.geometry;
   const tool = params.tool;
+  let geometryWasReplaced = false;
 
   // Calculate all symmetry points
   const symmetryPoints = calculateSymmetryPoints(params.clickPoint, params.symmetryAxes);
@@ -258,12 +261,22 @@ export function applySculptingStroke(params: SculptingStrokeParams): SculptingSt
     const localRadius = params.brushSize * 1.5;
     const localMaxEdge = params.brushSize * 0.25;
 
-    geometry = applySymmetricSubdivision(geometry, symmetryPoints, localRadius, localMaxEdge);
+    const subdivided = applySymmetricSubdivision(geometry, symmetryPoints, localRadius, localMaxEdge);
+
+    // Track if subdivision created new geometry
+    if (subdivided !== geometry) {
+      geometry = subdivided;
+      geometryWasReplaced = true;
+    }
 
     // Ensure topology is perfectly symmetric by adding any missing mirror vertices
     // This is expensive (O(n²)), so only run in tests
     if (params.ensureSymmetry) {
-      geometry = ensureGeometrySymmetry(geometry, params.symmetryAxes, 0.01);
+      const ensured = ensureGeometrySymmetry(geometry, params.symmetryAxes, 0.01);
+      if (ensured !== geometry) {
+        geometry = ensured;
+        geometryWasReplaced = true;
+      }
     }
   }
 
