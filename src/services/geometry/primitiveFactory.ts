@@ -41,11 +41,21 @@ export class PrimitiveFactory {
   }
 
   private static createSphere(avgScale: number): THREE.BufferGeometry {
-    const radius = avgScale;
-    const circumference = 2 * Math.PI * radius;
-    const widthSegments = Math.max(8, Math.min(128, Math.round(circumference / this.TARGET_EDGE_LENGTH)));
-    const heightSegments = Math.max(6, Math.min(64, Math.round(widthSegments / 2)));
-    return new THREE.SphereGeometry(1, widthSegments, heightSegments);
+    // Use icosphere (subdivided icosahedron) to avoid pole artifacts
+    // The geometry is created with radius=1, but will be scaled by avgScale in the scene
+
+    // For icosahedron at radius=1, subdivision 0, initial edge length ≈ 1.05
+    // After world scaling: actualEdgeLength = 1.05 * avgScale / (2^subdivisions)
+    const initialEdgeLength = 1.05 * avgScale;
+
+    // Target extremely fine detail for perfectly smooth spheres
+    const targetEdgeLength = 0.0075; // 2x finer than 0.015
+
+    // Calculate required subdivisions: initial / (2^N) = target
+    // Therefore: N = log2(initial / target)
+    const subdivisions = Math.max(5, Math.ceil(Math.log2(initialEdgeLength / targetEdgeLength)));
+
+    return new THREE.IcosahedronGeometry(1, subdivisions);
   }
 
   private static createCube(avgScale: number): THREE.BufferGeometry {
