@@ -281,7 +281,7 @@ describe("Sculpting Engine", () => {
 
     it("adapts mesh density over multiple strokes in same area", () => {
       let geometry = createTestSphere(1, 8, 6);
-      const initialCount = getVertexCount(geometry);
+      const beforeCount = getVertexCount(geometry);
 
       // First stroke - should subdivide
       const result1 = testSculpt({
@@ -295,7 +295,7 @@ describe("Sculpting Engine", () => {
       });
 
       const countAfterFirst = getVertexCount(result1.geometry);
-      expect(countAfterFirst).toBeGreaterThan(initialCount);
+      expect(countAfterFirst).toBeGreaterThan(beforeCount);
 
       // Second stroke in overlapping area - may subdivide more if needed
       geometry = result1.geometry;
@@ -494,7 +494,7 @@ describe("Sculpting Engine", () => {
     it("preserves mesh refinement after mouse release (no revert)", () => {
       // Start with a fresh sphere
       const initialGeometry = createTestSphere(1, 8, 6);
-      const initialCount = getVertexCount(initialGeometry);
+      const beforeCount = getVertexCount(initialGeometry);
 
       // Simulate mouse down + first sculpt stroke WITH subdivision
       const strokeResult = applySculptingStroke({
@@ -511,9 +511,9 @@ describe("Sculpting Engine", () => {
 
       const afterStrokeCount = getVertexCount(strokeResult.geometry);
 
-      // Verify subdivision happened
+      // Verify subdivision happened (starts at ~54 after merging, should add more)
       expect(strokeResult.modified).toBe(true);
-      expect(afterStrokeCount).toBeGreaterThan(initialCount);
+      expect(afterStrokeCount).toBeGreaterThan(beforeCount);
       expect(strokeResult.geometry).not.toBe(initialGeometry); // New geometry created
 
       // Store the subdivided geometry as if mesh.geometry was updated
@@ -522,9 +522,9 @@ describe("Sculpting Engine", () => {
       // Simulate mouse release - no action taken, just checking state
       // The geometry should remain subdivided, not revert to initial
 
-      // Verify the subdivided geometry is still valid and has more vertices
+      // Verify the subdivided geometry is still valid and has subdivision
       expect(getVertexCount(subdividedGeometry)).toBe(afterStrokeCount);
-      expect(getVertexCount(subdividedGeometry)).toBeGreaterThan(initialCount);
+      expect(getVertexCount(subdividedGeometry)).toBeGreaterThan(beforeCount);
 
       // Simulate starting a NEW stroke on the subdivided geometry
       // This should NOT revert to original geometry
@@ -547,7 +547,7 @@ describe("Sculpting Engine", () => {
 
     it("does not lose subdivision when passing geometry between strokes", () => {
       const geo1 = createTestSphere(1, 8, 6);
-      const count1 = getVertexCount(geo1);
+      const beforeCount = getVertexCount(geo1);
 
       // First stroke - creates subdivision
       const result1 = applySculptingStroke({
@@ -562,7 +562,7 @@ describe("Sculpting Engine", () => {
       });
 
       const count2 = getVertexCount(result1.geometry);
-      expect(count2).toBeGreaterThan(count1);
+      expect(count2).toBeGreaterThan(beforeCount);
 
       // Critical: Store the geometry reference like mesh.geometry would
       const storedGeometry = result1.geometry;

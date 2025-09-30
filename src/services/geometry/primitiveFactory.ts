@@ -94,20 +94,88 @@ export class PrimitiveFactory {
       (positions as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
     }
 
-    // Ensure geometry has indices for subdivision
-    if (!geometry.getIndex()) {
-      const positions = geometry.getAttribute('position');
-      const indices: number[] = [];
-      // For non-indexed geometry, create triangles
-      for (let i = 0; i < positions.count; i += 3) {
-        indices.push(i, i + 1, i + 2);
-      }
-      geometry.setIndex(indices);
-    }
+    // CRITICAL: Merge duplicate vertices to ensure watertight topology
+    // Three.js geometries often have duplicate vertices at seams/edges
+    // This must be done ONCE at creation time, not during every subdivision
+    this.mergeVertices(geometry);
 
     // Compute normals and bounds
     geometry.computeVertexNormals();
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
+  }
+
+  /**
+   * Merge duplicate vertices and ensure geometry has proper indices
+   * This creates watertight topology by removing vertex duplicates at seams
+   */
+  private static mergeVertices(geometry: THREE.BufferGeometry): void {
+    const positions = geometry.getAttribute('position');
+    const posArray = positions.array as Float32Array;
+
+    // Convert positions to Vector3 array
+    const vertices: THREE.Vector3[] = [];
+    for (let i = 0; i < positions.count; i++) {
+      vertices.push(new THREE.Vector3(
+        posArray[i * 3],
+        posArray[i * 3 + 1],
+        posArray[i * 3 + 2]
+      ));
+    }
+
+    // Get or create index
+    let indices = geometry.getIndex();
+    let indexArray: number[];
+
+    if (indices) {
+      indexArray = Array.from(indices.array);
+    } else {
+      // Non-indexed: create sequential indices
+      indexArray = [];
+      for (let i = 0; i < vertices.length; i++) {
+        indexArray.push(i);
+      }
+    }
+
+    // Merge duplicate vertices
+    // Use epsilon matching symmetry tolerance to avoid breaking symmetry
+    const epsilon = 0.001;
+    const vertexMap = new Map<string, number>();
+    const vertexRemap = new Map<number, number>();
+    const newVertices: THREE.Vector3[] = [];
+
+    for (let i = 0; i < vertices.length; i++) {
+      const v = vertices[i];
+      const key = `${Math.round(v.x / epsilon)}_${Math.round(v.y / epsilon)}_${Math.round(v.z / epsilon)}`;
+
+      let newIndex = vertexMap.get(key);
+      if (newIndex === undefined) {
+        newIndex = newVertices.length;
+        newVertices.push(v.clone());
+        vertexMap.set(key, newIndex);
+      }
+      vertexRemap.set(i, newIndex);
+    }
+
+    // Only update geometry if we actually merged vertices
+    if (newVertices.length < vertices.length) {
+      // Update positions
+      const newPosArray = new Float32Array(newVertices.length * 3);
+      for (let i = 0; i < newVertices.length; i++) {
+        newPosArray[i * 3] = newVertices[i].x;
+        newPosArray[i * 3 + 1] = newVertices[i].y;
+        newPosArray[i * 3 + 2] = newVertices[i].z;
+      }
+      geometry.setAttribute('position', new THREE.BufferAttribute(newPosArray, 3));
+
+      // Remap indices
+      for (let i = 0; i < indexArray.length; i++) {
+        indexArray[i] = vertexRemap.get(indexArray[i])!;
+      }
+      geometry.setIndex(indexArray);
+    } else if (!indices) {
+      // No merging needed but geometry wasn't indexed - add indices
+      geometry.setIndex(indexArray);
+    }
   }
 }

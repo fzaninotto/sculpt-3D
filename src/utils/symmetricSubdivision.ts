@@ -25,17 +25,38 @@ export function subdivideSymmetrically(
     ));
   }
 
-  // Get or create index
+  // Get index (geometry should already be properly indexed by PrimitiveFactory)
+  // If not, merge vertices as fallback
   let indices = geometry.getIndex();
   let indexArray: number[];
 
-  if (indices) {
-    indexArray = Array.from(indices.array);
-  } else {
-    indexArray = [];
-    for (let i = 0; i < vertices.length - 2; i += 3) {
-      indexArray.push(i, i + 1, i + 2);
+  if (!indices) {
+    // Fallback: merge vertices for geometries not created by PrimitiveFactory
+    // This handles test cases and edge cases
+    const epsilon = 0.001;
+    const vertexMap = new Map<string, number>();
+    const newIndices: number[] = [];
+    const newVertices: THREE.Vector3[] = [];
+
+    for (let i = 0; i < vertices.length; i++) {
+      const v = vertices[i];
+      const key = `${Math.round(v.x / epsilon)}_${Math.round(v.y / epsilon)}_${Math.round(v.z / epsilon)}`;
+
+      let index = vertexMap.get(key);
+      if (index === undefined) {
+        index = newVertices.length;
+        newVertices.push(v.clone());
+        vertexMap.set(key, index);
+      }
+      newIndices.push(index);
     }
+
+    // Update vertices and indexArray
+    vertices.length = 0;
+    vertices.push(...newVertices);
+    indexArray = newIndices;
+  } else {
+    indexArray = Array.from(indices.array);
   }
 
   // Mark edges for subdivision - combine influence from ALL points
@@ -135,7 +156,6 @@ export function subdivideSymmetrically(
   // Create midpoints for marked edges
   const newVertices = [...vertices];
   const edgeMidpoints = new Map<string, number>();
-
   for (const edge of edgesToSubdivide) {
     const [i1, i2] = edge.split('-').map(Number);
     const v1 = vertices[i1];
@@ -168,11 +188,12 @@ export function subdivideSymmetrically(
     const edge12 = makeEdgeKey(i1, i2);
     const edge20 = makeEdgeKey(i2, i0);
 
-    const hasEdge01 = edgesToSubdivide.has(edge01);
-    const hasEdge12 = edgesToSubdivide.has(edge12);
-    const hasEdge20 = edgesToSubdivide.has(edge20);
+    // Check if this triangle has midpoints (any edge was marked for subdivision)
+    const hasMidpoint01 = edgeMidpoints.has(edge01);
+    const hasMidpoint12 = edgeMidpoints.has(edge12);
+    const hasMidpoint20 = edgeMidpoints.has(edge20);
 
-    const pattern = (hasEdge01 ? 1 : 0) + (hasEdge12 ? 2 : 0) + (hasEdge20 ? 4 : 0);
+    const pattern = (hasMidpoint01 ? 1 : 0) + (hasMidpoint12 ? 2 : 0) + (hasMidpoint20 ? 4 : 0);
 
     switch (pattern) {
       case 0: // No edges subdivided
