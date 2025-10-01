@@ -1,20 +1,20 @@
-import * as THREE from 'three';
-import { subdivideSymmetrically } from '../../utils/symmetricSubdivision';
-import { ensureGeometrySymmetry } from '../../utils/ensureGeometrySymmetry';
-import type { ToolType } from '../../types';
+import * as THREE from "three";
+import { subdivideSymmetrically } from "../../utils/symmetricSubdivision";
+import { ensureGeometrySymmetry } from "../../utils/ensureGeometrySymmetry";
+import type { ToolType } from "../../types";
 
 export interface SculptingStrokeParams {
   geometry: THREE.BufferGeometry;
-  clickPoint: THREE.Vector3;  // in local space
+  clickPoint: THREE.Vector3; // in local space
   tool: ToolType;
   brushSize: number;
   brushStrength: number;
   symmetryAxes: { x: boolean; y: boolean; z: boolean };
-  pushToolPreviousPoint?: THREE.Vector3 | null;  // in local space, for push tool
-  invert?: boolean;  // for shift key
+  pushToolPreviousPoint?: THREE.Vector3 | null; // in local space, for push tool
+  invert?: boolean; // for shift key
   shouldSubdivide?: boolean;
-  cloneGeometry?: boolean;  // if true, clones geometry before modifying (for tests)
-  ensureSymmetry?: boolean;  // if true, runs expensive symmetry check (for tests only)
+  cloneGeometry?: boolean; // if true, clones geometry before modifying (for tests)
+  ensureSymmetry?: boolean; // if true, runs expensive symmetry check (for tests only)
 }
 
 export interface SculptingStrokeResult {
@@ -40,9 +40,12 @@ export function calculateSymmetryPoints(
   if (symmetryAxes.x) mirrorConfigs.push({ x: true, y: false, z: false });
   if (symmetryAxes.y) mirrorConfigs.push({ x: false, y: true, z: false });
   if (symmetryAxes.z) mirrorConfigs.push({ x: false, y: false, z: true });
-  if (symmetryAxes.x && symmetryAxes.y) mirrorConfigs.push({ x: true, y: true, z: false });
-  if (symmetryAxes.x && symmetryAxes.z) mirrorConfigs.push({ x: true, y: false, z: true });
-  if (symmetryAxes.y && symmetryAxes.z) mirrorConfigs.push({ x: false, y: true, z: true });
+  if (symmetryAxes.x && symmetryAxes.y)
+    mirrorConfigs.push({ x: true, y: true, z: false });
+  if (symmetryAxes.x && symmetryAxes.z)
+    mirrorConfigs.push({ x: true, y: false, z: true });
+  if (symmetryAxes.y && symmetryAxes.z)
+    mirrorConfigs.push({ x: false, y: true, z: true });
   if (symmetryAxes.x && symmetryAxes.y && symmetryAxes.z) {
     mirrorConfigs.push({ x: true, y: true, z: true });
   }
@@ -68,7 +71,12 @@ function applySymmetricSubdivision(
   localMaxEdge: number
 ): THREE.BufferGeometry {
   // Subdivide all points simultaneously to maintain topology symmetry
-  return subdivideSymmetrically(geometry, localPoints, localRadius, localMaxEdge);
+  return subdivideSymmetrically(
+    geometry,
+    localPoints,
+    localRadius,
+    localMaxEdge
+  );
 }
 
 /**
@@ -81,10 +89,10 @@ function calculateDirection(
   previousPoint: THREE.Vector3 | null,
   mirrorConfig: { x: boolean; y: boolean; z: boolean } | null
 ): THREE.Vector3 | null {
-  if (tool === 'push') {
+  if (tool === "push") {
     if (!previousPoint) return null;
 
-    let direction = clickPoint.clone().sub(previousPoint);
+    const direction = clickPoint.clone().sub(previousPoint);
 
     // If this is a mirrored point, mirror the movement
     if (mirrorConfig) {
@@ -97,7 +105,7 @@ function calculateDirection(
     return direction.normalize();
   } else {
     // For add/subtract, use normal
-    let direction = avgNormal.clone();
+    const direction = avgNormal.clone();
 
     // Mirror the normal if needed
     if (mirrorConfig) {
@@ -119,8 +127,8 @@ function calculateAverageNormal(
   clickPoint: THREE.Vector3,
   brushSize: number
 ): THREE.Vector3 {
-  const positions = geometry.getAttribute('position');
-  const normals = geometry.getAttribute('normal');
+  const positions = geometry.getAttribute("position");
+  const normals = geometry.getAttribute("normal");
 
   if (!normals) {
     return new THREE.Vector3(0, 1, 0);
@@ -129,7 +137,7 @@ function calculateAverageNormal(
   const posArray = positions.array as Float32Array;
   const normalsArray = normals.array as Float32Array;
 
-  let avgNormal = new THREE.Vector3();
+  const avgNormal = new THREE.Vector3();
   let count = 0;
 
   for (let i = 0; i < positions.count; i++) {
@@ -174,7 +182,7 @@ function applyDeformation(
   previousPoint: THREE.Vector3 | null,
   invert: boolean
 ): boolean {
-  const positions = geometry.getAttribute('position');
+  const positions = geometry.getAttribute("position");
   const positionsArray = positions.array as Float32Array;
 
   // Calculate average normal once (based on original click point)
@@ -188,14 +196,22 @@ function applyDeformation(
     const isOriginal = symIdx === 0;
 
     // Determine mirror configuration for this point
-    const mirrorConfig = isOriginal ? null : {
-      x: Math.sign(symPoint.x) !== Math.sign(clickPoint.x),
-      y: Math.sign(symPoint.y) !== Math.sign(clickPoint.y),
-      z: Math.sign(symPoint.z) !== Math.sign(clickPoint.z),
-    };
+    const mirrorConfig = isOriginal
+      ? null
+      : {
+          x: Math.sign(symPoint.x) !== Math.sign(clickPoint.x),
+          y: Math.sign(symPoint.y) !== Math.sign(clickPoint.y),
+          z: Math.sign(symPoint.z) !== Math.sign(clickPoint.z),
+        };
 
     // Calculate direction for this symmetry point
-    const direction = calculateDirection(tool, avgNormal, clickPoint, previousPoint, mirrorConfig);
+    const direction = calculateDirection(
+      tool,
+      avgNormal,
+      clickPoint,
+      previousPoint,
+      mirrorConfig
+    );
     if (!direction) continue;
 
     // Apply deformation to vertices near this symmetry point
@@ -209,17 +225,19 @@ function applyDeformation(
       const distance = vertex.distanceTo(symPoint);
 
       if (distance < brushSize) {
-        const falloff = 1 - (distance / brushSize);
+        const falloff = 1 - distance / brushSize;
         const strength = brushStrength * falloff * falloff * 0.02;
 
         let multiplier = strength;
 
-        if (tool === 'push') {
-          const moveDistance = previousPoint ? clickPoint.distanceTo(previousPoint) : 0;
+        if (tool === "push") {
+          const moveDistance = previousPoint
+            ? clickPoint.distanceTo(previousPoint)
+            : 0;
           multiplier = strength * Math.min(moveDistance * 250, 50.0);
           if (invert) multiplier = -multiplier;
         } else {
-          if (tool === 'subtract') {
+          if (tool === "subtract") {
             multiplier = -strength;
           }
           if (invert) {
@@ -246,36 +264,49 @@ function applyDeformation(
  * Note: By default, modifies geometry in place for performance.
  * Set cloneGeometry=true for immutable behavior (useful in tests).
  */
-export function applySculptingStroke(params: SculptingStrokeParams): SculptingStrokeResult {
+export function applySculptingStroke(
+  params: SculptingStrokeParams
+): SculptingStrokeResult {
   // For tests, clone the geometry for isolation
   // For UI, we'll modify in-place for performance, but track if we create new geometry
-  let geometry = params.cloneGeometry ? params.geometry.clone() : params.geometry;
+  let geometry = params.cloneGeometry
+    ? params.geometry.clone()
+    : params.geometry;
   const tool = params.tool;
-  let geometryWasReplaced = false;
 
   // Calculate all symmetry points
-  const symmetryPoints = calculateSymmetryPoints(params.clickPoint, params.symmetryAxes);
+  const symmetryPoints = calculateSymmetryPoints(
+    params.clickPoint,
+    params.symmetryAxes
+  );
 
   // Apply subdivision around all symmetry points if requested
   if (params.shouldSubdivide !== false) {
     const localRadius = params.brushSize * 1.5;
     const localMaxEdge = params.brushSize * 0.25;
 
-    const subdivided = applySymmetricSubdivision(geometry, symmetryPoints, localRadius, localMaxEdge);
+    const subdivided = applySymmetricSubdivision(
+      geometry,
+      symmetryPoints,
+      localRadius,
+      localMaxEdge
+    );
 
     // Track if subdivision created new geometry
     if (subdivided !== geometry) {
       geometry = subdivided;
-      geometryWasReplaced = true;
     }
 
     // Ensure topology is perfectly symmetric by adding any missing mirror vertices
     // This is expensive (O(n²)), so only run in tests
     if (params.ensureSymmetry) {
-      const ensured = ensureGeometrySymmetry(geometry, params.symmetryAxes, 0.01);
+      const ensured = ensureGeometrySymmetry(
+        geometry,
+        params.symmetryAxes,
+        0.01
+      );
       if (ensured !== geometry) {
         geometry = ensured;
-        geometryWasReplaced = true;
       }
     }
   }
@@ -293,7 +324,7 @@ export function applySculptingStroke(params: SculptingStrokeParams): SculptingSt
   );
 
   if (modified) {
-    const positions = geometry.getAttribute('position');
+    const positions = geometry.getAttribute("position");
     positions.needsUpdate = true;
     geometry.computeVertexNormals();
     geometry.computeBoundingBox();
@@ -302,6 +333,6 @@ export function applySculptingStroke(params: SculptingStrokeParams): SculptingSt
 
   return {
     geometry,
-    modified
+    modified,
   };
 }

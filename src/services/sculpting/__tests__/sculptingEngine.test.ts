@@ -619,7 +619,11 @@ describe("Sculpting Engine", () => {
         cloneGeometry: false, // UI mode
       });
 
-      console.log(`After stroke 1: ${getVertexCount(stroke1.geometry)} vertices, modified=${stroke1.modified}`);
+      console.log(
+        `After stroke 1: ${getVertexCount(
+          stroke1.geometry
+        )} vertices, modified=${stroke1.modified}`
+      );
 
       // UI updates: mesh.geometry = result.geometry
       if (stroke1.modified) {
@@ -641,7 +645,11 @@ describe("Sculpting Engine", () => {
         cloneGeometry: false,
       });
 
-      console.log(`After stroke 2: ${getVertexCount(stroke2.geometry)} vertices, modified=${stroke2.modified}`);
+      console.log(
+        `After stroke 2: ${getVertexCount(
+          stroke2.geometry
+        )} vertices, modified=${stroke2.modified}`
+      );
 
       // UI updates
       if (stroke2.modified) {
@@ -652,7 +660,9 @@ describe("Sculpting Engine", () => {
       expect(getVertexCount(meshGeometry)).toBe(afterSubdivisionVertices);
 
       // User releases mouse - no action, just checking state
-      console.log(`After mouse release: ${getVertexCount(meshGeometry)} vertices`);
+      console.log(
+        `After mouse release: ${getVertexCount(meshGeometry)} vertices`
+      );
 
       // CRITICAL CHECK: Geometry should STILL be subdivided
       expect(getVertexCount(meshGeometry)).toBe(afterSubdivisionVertices);
@@ -670,10 +680,14 @@ describe("Sculpting Engine", () => {
         cloneGeometry: false,
       });
 
-      console.log(`After stroke 3: ${getVertexCount(stroke3.geometry)} vertices`);
+      console.log(
+        `After stroke 3: ${getVertexCount(stroke3.geometry)} vertices`
+      );
 
       // Should have at least the previous subdivision
-      expect(getVertexCount(stroke3.geometry)).toBeGreaterThanOrEqual(afterSubdivisionVertices);
+      expect(getVertexCount(stroke3.geometry)).toBeGreaterThanOrEqual(
+        afterSubdivisionVertices
+      );
     });
 
     it("reproduces React state sync bug: in-place modification not updating state", () => {
@@ -687,7 +701,9 @@ describe("Sculpting Engine", () => {
       let meshRefGeometry = reactStateGeometry;
 
       console.log(`\n=== Initial State ===`);
-      console.log(`React state vertices: ${getVertexCount(reactStateGeometry)}`);
+      console.log(
+        `React state vertices: ${getVertexCount(reactStateGeometry)}`
+      );
       console.log(`Mesh ref vertices: ${getVertexCount(meshRefGeometry)}`);
       console.log(`Same reference: ${reactStateGeometry === meshRefGeometry}`);
 
@@ -706,7 +722,9 @@ describe("Sculpting Engine", () => {
 
       console.log(`Result modified: ${result1.modified}`);
       console.log(`Result vertices: ${getVertexCount(result1.geometry)}`);
-      console.log(`New geometry created: ${result1.geometry !== meshRefGeometry}`);
+      console.log(
+        `New geometry created: ${result1.geometry !== meshRefGeometry}`
+      );
 
       // Simulate UI behavior: update mesh ref
       meshRefGeometry = result1.geometry;
@@ -723,7 +741,9 @@ describe("Sculpting Engine", () => {
         console.log(`React state NOT updated (BUG!)`);
       }
 
-      console.log(`React state vertices: ${getVertexCount(reactStateGeometry)}`);
+      console.log(
+        `React state vertices: ${getVertexCount(reactStateGeometry)}`
+      );
       console.log(`Mesh ref vertices: ${getVertexCount(meshRefGeometry)}`);
       console.log(`States in sync: ${reactStateGeometry === meshRefGeometry}`);
 
@@ -745,15 +765,16 @@ describe("Sculpting Engine", () => {
 
       console.log(`Result modified: ${result2.modified}`);
       console.log(`Result vertices: ${getVertexCount(result2.geometry)}`);
-      console.log(`Same geometry reference: ${result2.geometry === meshRefGeometry}`);
+      console.log(
+        `Same geometry reference: ${result2.geometry === meshRefGeometry}`
+      );
 
-      // Simulate UI behavior: update mesh ref (even though it's same object)
-      const previousMeshRef = meshRefGeometry;
       meshRefGeometry = result2.geometry;
 
       // Simulate UI behavior: check if we should update React state
       // FIX: Always update state when modified, not just when reference changes
-      const shouldUpdateState2 = result2.modified || result2.geometry !== reactStateGeometry;
+      const shouldUpdateState2 =
+        result2.modified || result2.geometry !== reactStateGeometry;
       console.log(`Should update React state (fixed): ${shouldUpdateState2}`);
 
       if (shouldUpdateState2) {
@@ -763,7 +784,9 @@ describe("Sculpting Engine", () => {
         console.log(`React state NOT updated (BUG!)`);
       }
 
-      console.log(`React state vertices: ${getVertexCount(reactStateGeometry)}`);
+      console.log(
+        `React state vertices: ${getVertexCount(reactStateGeometry)}`
+      );
       console.log(`Mesh ref vertices: ${getVertexCount(meshRefGeometry)}`);
       console.log(`States in sync: ${reactStateGeometry === meshRefGeometry}`);
 
@@ -793,50 +816,69 @@ describe("Sculpting Engine", () => {
   });
 
   describe("Rapid Consecutive Strokes", () => {
-    it('simulates version-based race detection with concurrent frames', () => {
+    it("simulates version-based race detection with concurrent frames", () => {
       // Simulate the version-based system used in the UI
       let geometryRef = createTestSphere(1, 8, 6);
-      let geometryVersionRef = { current: 0 };
-      const updates: Array<{ geometry: THREE.BufferGeometry; startingVersion: number; accepted: boolean }> = [];
+      const geometryVersionRef = { current: 0 };
+      const updates: Array<{
+        geometry: THREE.BufferGeometry;
+        startingVersion: number;
+        accepted: boolean;
+      }> = [];
 
       // Simulate onGeometryUpdate callback from SceneObject
-      const onGeometryUpdate = (newGeometry: THREE.BufferGeometry, startingVersion: number): boolean => {
-        console.log(`[onGeometryUpdate] called with startingVersion=${startingVersion}, currentVersion=${geometryVersionRef.current}`);
+      const onGeometryUpdate = (
+        newGeometry: THREE.BufferGeometry,
+        startingVersion: number
+      ): boolean => {
+        console.log(
+          `[onGeometryUpdate] called with startingVersion=${startingVersion}, currentVersion=${geometryVersionRef.current}`
+        );
 
         if (geometryVersionRef.current !== startingVersion) {
           console.log(`[onGeometryUpdate] RACE DETECTED - rejecting`);
-          updates.push({ geometry: newGeometry, startingVersion, accepted: false });
+          updates.push({
+            geometry: newGeometry,
+            startingVersion,
+            accepted: false,
+          });
           return false;
         }
 
         geometryRef = newGeometry;
         geometryVersionRef.current++;
-        console.log(`[onGeometryUpdate] accepted, new version=${geometryVersionRef.current}`);
-        updates.push({ geometry: newGeometry, startingVersion, accepted: true });
+        console.log(
+          `[onGeometryUpdate] accepted, new version=${geometryVersionRef.current}`
+        );
+        updates.push({
+          geometry: newGeometry,
+          startingVersion,
+          accepted: true,
+        });
         return true;
       };
 
       const clickPoint = new THREE.Vector3(0, 1, 0);
 
-      console.log('\n=== Simulating Rapid Concurrent Frames ===');
-      console.log('Initial vertices:', getVertexCount(geometryRef));
-      console.log('Initial version:', geometryVersionRef.current);
+      console.log("\n=== Simulating Rapid Concurrent Frames ===");
+      console.log("Initial vertices:", getVertexCount(geometryRef));
+      console.log("Initial version:", geometryVersionRef.current);
 
       // Frame 1: Capture version BEFORE any work
       const frame1StartVersion = geometryVersionRef.current;
-      console.log('\n[Frame 1] starts, captures version:', frame1StartVersion);
+      console.log("\n[Frame 1] starts, captures version:", frame1StartVersion);
 
       // Frame 2: Starts immediately (before Frame 1 completes)
       const frame2StartVersion = geometryVersionRef.current;
-      console.log('[Frame 2] starts, captures version:', frame2StartVersion);
-      console.log('Both frames captured same version!');
+      console.log("[Frame 2] starts, captures version:", frame2StartVersion);
+      console.log("Both frames captured same version!");
 
       // Frame 1 completes: Should subdivide and create new geometry
-      console.log('\n[Frame 1] applying stroke with subdivision...');
+      console.log("\n[Frame 1] applying stroke with subdivision...");
       const frame1Result = applySculptingStroke({
         geometry: geometryRef,
         clickPoint,
-        tool: 'add',
+        tool: "add",
         brushSize: 0.5,
         brushStrength: 1.0,
         symmetryAxes: { x: false, y: false, z: false },
@@ -844,24 +886,32 @@ describe("Sculpting Engine", () => {
         cloneGeometry: false,
       });
 
-      console.log('[Frame 1] stroke complete:', {
+      console.log("[Frame 1] stroke complete:", {
         modified: frame1Result.modified,
         vertices: getVertexCount(frame1Result.geometry),
-        subdivided: getVertexCount(frame1Result.geometry) > getVertexCount(geometryRef),
+        subdivided:
+          getVertexCount(frame1Result.geometry) > getVertexCount(geometryRef),
       });
 
       // Frame 1 calls onGeometryUpdate
-      const frame1Accepted = onGeometryUpdate(frame1Result.geometry, frame1StartVersion);
+      const frame1Accepted = onGeometryUpdate(
+        frame1Result.geometry,
+        frame1StartVersion
+      );
       const afterFrame1Vertices = getVertexCount(geometryRef);
-      console.log('[Frame 1] after update, geometryRef has', afterFrame1Vertices, 'vertices');
+      console.log(
+        "[Frame 1] after update, geometryRef has",
+        afterFrame1Vertices,
+        "vertices"
+      );
 
       // Frame 2 completes: No subdivision, modifies in-place
       // This should be REJECTED because version changed
-      console.log('\n[Frame 2] applying stroke WITHOUT subdivision...');
+      console.log("\n[Frame 2] applying stroke WITHOUT subdivision...");
       const frame2Result = applySculptingStroke({
         geometry: geometryRef, // Now points to subdivided geometry from Frame 1
         clickPoint: clickPoint.clone().add(new THREE.Vector3(0.1, 0, 0)),
-        tool: 'add',
+        tool: "add",
         brushSize: 0.5,
         brushStrength: 1.0,
         symmetryAxes: { x: false, y: false, z: false },
@@ -869,24 +919,34 @@ describe("Sculpting Engine", () => {
         cloneGeometry: false,
       });
 
-      console.log('[Frame 2] stroke complete:', {
+      console.log("[Frame 2] stroke complete:", {
         modified: frame2Result.modified,
         vertices: getVertexCount(frame2Result.geometry),
       });
 
       // Frame 2 calls onGeometryUpdate - should be REJECTED
-      const frame2Accepted = onGeometryUpdate(frame2Result.geometry, frame2StartVersion);
+      const frame2Accepted = onGeometryUpdate(
+        frame2Result.geometry,
+        frame2StartVersion
+      );
       const afterFrame2Vertices = getVertexCount(geometryRef);
-      console.log('[Frame 2] after update attempt, geometryRef has', afterFrame2Vertices, 'vertices');
+      console.log(
+        "[Frame 2] after update attempt, geometryRef has",
+        afterFrame2Vertices,
+        "vertices"
+      );
 
-      console.log('\n=== Final State ===');
-      console.log('Final vertices:', getVertexCount(geometryRef));
-      console.log('Final version:', geometryVersionRef.current);
-      console.log('Updates summary:', updates.map(u => ({
-        vertices: getVertexCount(u.geometry),
-        startingVersion: u.startingVersion,
-        accepted: u.accepted
-      })));
+      console.log("\n=== Final State ===");
+      console.log("Final vertices:", getVertexCount(geometryRef));
+      console.log("Final version:", geometryVersionRef.current);
+      console.log(
+        "Updates summary:",
+        updates.map((u) => ({
+          vertices: getVertexCount(u.geometry),
+          startingVersion: u.startingVersion,
+          accepted: u.accepted,
+        }))
+      );
 
       // Assertions
       expect(frame1Accepted).toBe(true);
@@ -976,7 +1036,9 @@ describe("Sculpting Engine", () => {
 
       expect(result3.modified).toBe(true);
       // Should maintain or increase vertices
-      expect(getVertexCount(result3.geometry)).toBeGreaterThanOrEqual(countAfterSub);
+      expect(getVertexCount(result3.geometry)).toBeGreaterThanOrEqual(
+        countAfterSub
+      );
     });
 
     it("preserves subdivision when reusing same geometry object", () => {
@@ -1048,7 +1110,11 @@ describe("Sculpting Engine", () => {
       expect(result2.modified).toBe(true);
 
       // Verify symmetry is still maintained
-      const symmetryCheck = verifyGeometrySymmetry(result2.geometry, { x: true }, 0.001);
+      const symmetryCheck = verifyGeometrySymmetry(
+        result2.geometry,
+        { x: true },
+        0.001
+      );
       expect(symmetryCheck.isSymmetric).toBe(true);
     });
   });
