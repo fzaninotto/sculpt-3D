@@ -2,6 +2,12 @@
 
 A browser-based 3D sculpting application built with React and Three.js, offering real-time mesh manipulation and sculpting tools similar to professional 3D modeling software.
 
+
+
+https://github.com/user-attachments/assets/3f3c7f82-a05a-400a-be55-bfd3fc1ea78a
+
+
+
 ## Features
 
 - **Real-time 3D Sculpting**: Add, subtract, and push mesh surfaces with dynamic subdivision
