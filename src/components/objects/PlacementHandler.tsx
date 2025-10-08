@@ -40,11 +40,27 @@ export function PlacementHandler({
     placementRef.current = placement;
   }, [placement]);
 
-  const getGroundIntersection = useCallback((event: MouseEvent) => {
+  const getGroundIntersection = useCallback((event: MouseEvent | TouchEvent) => {
     const rect = gl.domElement.getBoundingClientRect();
+
+    // Extract client coordinates from mouse or touch event
+    let clientX: number;
+    let clientY: number;
+
+    if ('touches' in event) {
+      // Touch event
+      if (event.touches.length === 0) return null;
+      clientX = event.touches[0].clientX;
+      clientY = event.touches[0].clientY;
+    } else {
+      // Mouse event
+      clientX = event.clientX;
+      clientY = event.clientY;
+    }
+
     const mouse = new THREE.Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
     );
 
     raycaster.setFromCamera(mouse, camera);
@@ -88,14 +104,45 @@ export function PlacementHandler({
       }
     };
 
-    const handleMouseMove = (event: MouseEvent) => {
+    const handleTouchStart = (event: TouchEvent) => {
+      if (isActive && event.touches.length === 1) {
+        event.preventDefault();
+        event.stopPropagation();
+        const point = getGroundIntersection(event);
+        if (point) {
+          setPlacement({
+            isPlacing: true,
+            startPoint: point,
+            currentPoint: point,
+            previewPosition: [point.x, point.y + 0.1, point.z],
+            previewScale: 0.1,
+            previewRotation: [0, 0, 0],
+          });
+        }
+      }
+    };
+
+    const handlePointerMove = (event: MouseEvent | TouchEvent) => {
       const currentPlacement = placementRef.current;
       if (currentPlacement.isPlacing && currentPlacement.startPoint) {
-        const shiftPressed = event.shiftKey;
+        const shiftPressed = 'shiftKey' in event ? event.shiftKey : false;
         const rect = gl.domElement.getBoundingClientRect();
+
+        // Extract coordinates from mouse or touch event
+        let clientX: number;
+        let clientY: number;
+        if ('touches' in event) {
+          if (event.touches.length === 0) return;
+          clientX = event.touches[0].clientX;
+          clientY = event.touches[0].clientY;
+        } else {
+          clientX = event.clientX;
+          clientY = event.clientY;
+        }
+
         const mouse = new THREE.Vector2(
-          ((event.clientX - rect.left) / rect.width) * 2 - 1,
-          -((event.clientY - rect.top) / rect.height) * 2 + 1
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          -((clientY - rect.top) / rect.height) * 2 + 1
         );
 
         raycaster.setFromCamera(mouse, camera);
@@ -137,11 +184,20 @@ export function PlacementHandler({
       }
     };
 
-    const handleMouseUp = (event: MouseEvent) => {
-      const currentPlacement = placementRef.current;
-      if (event.button === 0 && currentPlacement.isPlacing && isActive) {
+    const handleMouseMove = (event: MouseEvent) => {
+      handlePointerMove(event);
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches.length === 1) {
         event.preventDefault();
-        event.stopPropagation();
+        handlePointerMove(event);
+      }
+    };
+
+    const handlePointerEnd = () => {
+      const currentPlacement = placementRef.current;
+      if (currentPlacement.isPlacing && isActive) {
         const { previewPosition, previewScale, previewRotation } = currentPlacement;
         if (previewScale > 0.3) {
           onPlaceObject(selectedPrimitive, previewPosition, previewScale, previewRotation);
@@ -157,15 +213,41 @@ export function PlacementHandler({
       }
     };
 
+    const handleMouseUp = (event: MouseEvent) => {
+      if (event.button === 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        handlePointerEnd();
+      }
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      handlePointerEnd();
+    };
+
     const canvas = gl.domElement;
+    // Mouse events
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseup', handleMouseUp);
 
+    // Touch events
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+
     return () => {
+      // Remove mouse events
       canvas.removeEventListener('mousedown', handleMouseDown);
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseup', handleMouseUp);
+
+      // Remove touch events
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
     };
   }, [isActive, selectedPrimitive, getGroundIntersection, onPlaceObject, gl]);
 

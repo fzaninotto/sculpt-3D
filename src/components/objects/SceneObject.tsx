@@ -153,19 +153,33 @@ export function SceneObject({
   useEffect(() => {
     const canvas = gl.domElement;
 
-    const handleMouseDown = (event: MouseEvent) => {
-      if (event.button === 0 && isSculptMode && isSelected) {
-        event.preventDefault();
-        event.stopPropagation();
-
+    const handlePointerStart = (clientX: number, clientY: number) => {
+      if (isSculptMode && isSelected) {
         // Reset modification tracking for this stroke
         hasModifiedDuringStroke.current = false;
         setIsMouseDown(true);
 
         const rect = canvas.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((clientY - rect.top) / rect.height) * 2 + 1;
         updateMousePosition(x, y);
+      }
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button === 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        handlePointerStart(event.clientX, event.clientY);
+      }
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 1) {
+        event.preventDefault();
+        event.stopPropagation();
+        const touch = event.touches[0];
+        handlePointerStart(touch.clientX, touch.clientY);
       }
     };
 
@@ -189,10 +203,10 @@ export function SceneObject({
       }
     };
 
-    const handleMouseMove = (event: MouseEvent) => {
+    const handlePointerMove = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
       if (isDragging) {
         updateDrag(x, y);
@@ -201,21 +215,47 @@ export function SceneObject({
       }
     };
 
+    const handleMouseMove = (event: MouseEvent) => {
+      handlePointerMove(event.clientX, event.clientY);
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches.length === 1) {
+        event.preventDefault();
+        const touch = event.touches[0];
+        handlePointerMove(touch.clientX, touch.clientY);
+      }
+    };
+
     const needsMouseEvents = (isSculptMode && isSelected) ||
                             (currentTool === 'move' || currentTool === 'scale');
 
     if (needsMouseEvents) {
+      // Mouse events
       canvas.addEventListener('mousedown', handleMouseDown);
       canvas.addEventListener('mouseup', handleMouseUp);
       canvas.addEventListener('mouseleave', handleMouseUp);
       canvas.addEventListener('mousemove', handleMouseMove);
+
+      // Touch events
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+      canvas.addEventListener('touchend', handleMouseUp);
+      canvas.addEventListener('touchcancel', handleMouseUp);
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     }
 
     return () => {
+      // Remove mouse events
       canvas.removeEventListener('mousedown', handleMouseDown);
       canvas.removeEventListener('mouseup', handleMouseUp);
       canvas.removeEventListener('mouseleave', handleMouseUp);
       canvas.removeEventListener('mousemove', handleMouseMove);
+
+      // Remove touch events
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchend', handleMouseUp);
+      canvas.removeEventListener('touchcancel', handleMouseUp);
+      canvas.removeEventListener('touchmove', handleTouchMove);
     };
   }, [currentTool, isSculptMode, isSelected, isDragging, gl, endDrag, resetPushTool, updateMousePosition, updateDrag, id, onRequestStateSave, isMouseDown]);
 
