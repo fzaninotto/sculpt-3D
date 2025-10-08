@@ -1,4 +1,4 @@
-# ZBrush-like 3D Modeling App - Architecture
+# 3D Modeling App - Architecture
 
 ## Overview
 This is a web-based 3D modeling and sculpting application built with React, Three.js, and TypeScript. The codebase follows a clean, modular architecture with clear separation of concerns.

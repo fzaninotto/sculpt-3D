@@ -40,8 +40,8 @@ https://github.com/user-attachments/assets/3f3c7f82-a05a-400a-be55-bfd3fc1ea78a
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/zbrush.git
-cd zbrush
+git clone https://github.com/yourusername/sculpt-3D.git
+cd sculpt-3D
 ```
 
 2. Install dependencies:
